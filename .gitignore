@@ -1,0 +1,23 @@
+# Secrets — ne jamais committer
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Données de travail et sorties
+uploads/*
+outputs/*
+temp/*
+!uploads/.gitkeep
+!outputs/.gitkeep
+!temp/.gitkeep
+
+# Divers
+.DS_Store
