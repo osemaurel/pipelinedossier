@@ -12,7 +12,7 @@ from typing import Awaitable, Callable
 from backend.config import Settings
 from backend.core.logging import get_logger
 from backend.models.schemas import PhotoRow, Profile
-from backend.prompts.avatar_prompt import AvatarContext, build_avatar_prompt
+from backend.prompts.avatar_prompt import AvatarContext, AvatarStyle, build_avatar_prompt
 from backend.services.openai_service import OpenAIService
 
 logger = get_logger(__name__)
@@ -47,6 +47,15 @@ class ImageGenerator:
     def __init__(self, openai: OpenAIService, settings: Settings) -> None:
         self._openai = openai
         self._semaphore = asyncio.Semaphore(max(1, settings.image_concurrency))
+        try:
+            self._style = AvatarStyle(settings.openai_image_style.strip().lower())
+        except ValueError:
+            logger.warning(
+                "OPENAI_IMAGE_STYLE=%r inconnu, repli sur « illustration ». "
+                "Valeurs acceptées : illustration, photo.",
+                settings.openai_image_style,
+            )
+            self._style = AvatarStyle.ILLUSTRATION
 
     async def generate_for_profiles(
         self,
@@ -78,6 +87,8 @@ class ImageGenerator:
                 yeux=profile.yeux,
                 cheveux=profile.cheveux,
                 variant_index=order - 1,
+                centres_interet=profile.centres_interet,
+                style=self._style,
             )
             try:
                 if filename in done and target.exists():

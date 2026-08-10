@@ -149,3 +149,39 @@ def test_png_provenance_chunk_is_inserted():
 
 def test_stamp_provenance_ignores_non_png():
     assert stamp_provenance(b"pas une image") == b"pas une image"
+
+
+def test_avatar_prompts_vary_scene_but_keep_the_character_stable():
+    from backend.prompts.avatar_prompt import AvatarContext, AvatarStyle, build_avatar_prompt
+
+    def make(code: str, index: int) -> AvatarContext:
+        return AvatarContext(
+            code_femme=code, age=31, ville="Abidjan", pays="Côte d'Ivoire",
+            profession="Infirmière", yeux="Marron", cheveux="Noir",
+            variant_index=index, centres_interet="Cuisine ; Voyages ; Danse",
+            style=AvatarStyle.ILLUSTRATION,
+        )
+
+    prompts = [build_avatar_prompt(make("PAL-0001", i)) for i in range(4)]
+    assert len(set(prompts)) == 4, "chaque variante doit décrire une scène différente"
+    assert all("environ 31 ans, yeux marron, cheveux noir" in p for p in prompts)
+    assert "Photo principale" in prompts[0]
+    # Deux personnes ne doivent pas suivre la même séquence de décors.
+    assert build_avatar_prompt(make("PAL-0002", 1)) != prompts[1]
+
+
+def test_photo_style_switches_the_rendering_directive():
+    from backend.prompts.avatar_prompt import AvatarContext, AvatarStyle, build_avatar_prompt
+
+    common = dict(
+        code_femme="PAL-0001", age=31, ville="Dakar", pays="Sénégal",
+        profession="Comptable", yeux="Noir", cheveux="Noir", variant_index=1,
+    )
+    illustration = build_avatar_prompt(AvatarContext(**common, style=AvatarStyle.ILLUSTRATION))
+    photo = build_avatar_prompt(AvatarContext(**common, style=AvatarStyle.PHOTO))
+    assert "non photographique" in illustration
+    assert "Photographie de portrait" in photo
+    # Les garde-fous de décence et d'unicité s'appliquent aux deux rendus.
+    for prompt in (illustration, photo):
+        assert "seule sur l'image" in prompt
+        assert "aucune personne réelle" in prompt
