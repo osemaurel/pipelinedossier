@@ -99,20 +99,26 @@ BACKEND_PID=$!
 FRONTEND_PID=$!
 
 echo "  Démarrage…"
-for _ in $(seq 1 40); do
-  if curl -s -o /dev/null http://localhost:3000/ 2>/dev/null; then break; fi
-  sleep 0.5
-done
+
+# L'adresse n'est pas garantie : si le port 3000 est déjà pris, le serveur
+# bascule sur le suivant. On récupère donc l'adresse réellement utilisée.
+URL=$("$PY" scripts/attendre_app.py)
+
+if [ -z "$URL" ]; then
+  fatal "L'application n'a pas démarré." \
+        "Fermez cette fenêtre, relancez ce fichier, et si le problème persiste
+  signalez-le en recopiant ce qui s'affiche ici."
+fi
 
 if command -v open >/dev/null 2>&1; then
-  open http://localhost:3000
+  open "$URL"
 elif command -v xdg-open >/dev/null 2>&1; then
-  xdg-open http://localhost:3000 >/dev/null 2>&1
+  xdg-open "$URL" >/dev/null 2>&1
 fi
 
 echo ""
 echo "${GREEN}${BOLD}  L'application est ouverte dans votre navigateur.${OFF}"
-echo "  Si l'onglet ne s'est pas ouvert : allez sur http://localhost:3000"
+echo "  Si l'onglet ne s'est pas ouvert : allez sur ${BOLD}${URL}${OFF}"
 echo ""
 echo "  ${BOLD}Gardez cette fenêtre ouverte${OFF} pendant que vous travaillez."
 echo "  Pour tout arrêter : fermez cette fenêtre."

@@ -97,6 +97,26 @@ Votre compte OpenAI n'a plus de crédit. Rechargez-le sur
 La clé a été mal copiée. Supprimez le fichier nommé `.env` dans le dossier, puis
 relancez : la clé vous sera redemandée.
 
+**« Aucune clé saisie » alors que vous l'avez bien collée**
+Dans la fenêtre noire de Windows, le collage se fait par un **clic droit**, pas
+par Ctrl+V, et **la clé reste invisible pendant que vous la collez** — c'est
+normal, tapez Entrée quand même.
+
+Si le problème persiste, enregistrez la clé vous-même, c'est très simple :
+
+1. Dans le dossier, faites une copie du fichier `.env.example`.
+2. Renommez cette copie en `.env` — exactement ça, un point puis `env`, sans
+   rien après.
+3. Ouvrez-la avec le Bloc-notes (clic droit → Ouvrir avec → Bloc-notes).
+4. Sur la ligne `OPENAI_API_KEY=`, collez votre clé juste après le `=`, sans
+   espace. Vous devez obtenir quelque chose comme
+   `OPENAI_API_KEY=sk-proj-abc123...`
+5. Enregistrez, fermez, relancez `demarrer.bat`.
+
+*Windows masque parfois les extensions* : si vous voyez `.env.txt` au lieu de
+`.env`, allez dans l'onglet Affichage de l'explorateur et cochez « Extensions de
+noms de fichiers » pour pouvoir corriger le nom.
+
 **La page reste blanche**
 Attendez une minute — au premier lancement, le démarrage est lent. Puis
 actualisez la page.
