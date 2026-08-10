@@ -1,12 +1,12 @@
 """Prompts de génération des avatars.
 
-Chaque visuel est construit à partir des données réelles du profil : profession,
-ville, centres d'intérêt. La cohérence du personnage vient d'une description
-physique stable, partagée par toutes ses variantes ; la variété vient du décor,
-de la tenue, de la lumière et du cadrage, qui changent à chaque prise.
+Les visuels imitent des photos personnelles ordinaires — selfies au téléphone,
+décors du quotidien — parce que c'est ce à quoi ressemble une galerie de profil.
+Le rendu vise l'appareil photo de téléphone, pas le portrait de studio : c'est
+l'éclairage de studio et le lissage de peau qui trahissent une image fabriquée.
 
-Les consignes de cadrage et la liste de ce qui est à éviter sont reprises du
-« Lisez-moi » du modèle, qui décrit précisément les photos attendues.
+La cohérence du personnage vient d'une fiche physique stable, partagée par toutes
+ses images. La variété vient du lieu, de la tenue, de la pose et de l'heure.
 """
 
 from __future__ import annotations
@@ -16,80 +16,85 @@ from enum import Enum
 
 
 class AvatarStyle(str, Enum):
-    """Rendu des visuels.
-
-    `ILLUSTRATION` produit des portraits dessinés, lisibles au premier coup d'œil
-    comme des avatars de synthèse. `PHOTO` produit des portraits photoréalistes :
-    à réserver aux plateformes qui indiquent à leurs utilisateurs que les
-    personnages sont générés, puisque rien dans l'image ne le signalera plus.
-    """
-
-    ILLUSTRATION = "illustration"
     PHOTO = "photo"
+    ILLUSTRATION = "illustration"
 
 
-STYLE_DIRECTIVES: dict[AvatarStyle, str] = {
-    AvatarStyle.ILLUSTRATION: (
-        "Illustration numérique de portrait, style vectoriel éditorial contemporain : "
-        "aplats de couleur, ombrage doux, traits nets. Rendu clairement illustré et "
-        "non photographique."
-    ),
-    AvatarStyle.PHOTO: (
-        "Photographie de portrait naturelle, objectif 50 mm, faible profondeur de champ, "
-        "lumière naturelle, grain discret. Rendu réaliste et non retouché, sans effet "
-        "de studio publicitaire."
-    ),
-}
-
-# Repris du « Lisez-moi » : « À éviter — captures d'écran, filtres lourds, texte
-# ou logo incrusté, photos de groupe en principale, images floues, nudité. »
-NEGATIVE_DIRECTIVE = (
-    "La personne est seule sur l'image. Pas de texte, pas de logo, pas de filigrane, "
-    "pas de filtre marqué, image nette. Tenue décente et couvrante, cadrage non suggestif."
+# Esthétique « photo de téléphone ». Les termes de photographie professionnelle
+# (studio, 50 mm, bokeh crémeux) sont volontairement absents : ils produisent le
+# rendu lisse et publicitaire qui se repère au premier coup d'œil.
+PHOTO_DIRECTIVE = (
+    "Photo personnelle prise au téléphone. Rendu d'appareil photo de smartphone : "
+    "netteté correcte sans excès, léger bruit numérique, lumière ambiante réelle "
+    "non contrôlée, balance des blancs imparfaite. "
+    "Peau naturelle avec sa texture, ses pores et ses irrégularités — aucun lissage, "
+    "aucun filtre de beauté, aucune retouche. Cadrage spontané, légèrement de travers. "
+    "Ce doit ressembler à une photo prise sur le vif, pas à une séance photo."
 )
 
-# Cadrage de la photo principale, imposé par le « Lisez-moi » du modèle :
-# « Portrait vertical, visage net et bien éclairé, seule sur la photo. »
-MAIN_SHOT = "portrait vertical serré sur le visage, regard vers l'objectif, expression avenante"
+ILLUSTRATION_DIRECTIVE = (
+    "Illustration numérique de portrait, style vectoriel contemporain : aplats de "
+    "couleur, ombrage doux, traits nets, arrière-plan simplifié."
+)
 
-FRAMINGS: list[str] = [
-    "cadrage buste, de trois quarts, regard vers l'objectif",
-    "cadrage à mi-corps, posture détendue, regard légèrement de côté",
-    "plan taille, debout, expression naturelle",
-    "portrait rapproché, de trois quarts opposé, sourire discret",
-    "plan large, la personne occupe le tiers de l'image, décor visible",
-    "cadrage buste, assise, appuyée sur un accoudoir",
-]
+NEGATIVE_DIRECTIVE = (
+    "Elle est seule sur l'image. Pas de texte, pas de logo, pas de filigrane. "
+    "Tenue de tous les jours, couvrante ; cadrage non suggestif. "
+    "Personnage imaginaire : ne reproduis les traits d'aucune personne réelle ou célèbre."
+)
 
-SETTINGS: list[str] = [
-    "dans le salon d'un appartement, lumière douce entrant par la fenêtre",
-    "à la terrasse d'un café, en fin d'après-midi",
-    "dans une rue commerçante animée, arrière-plan flou",
-    "sur un marché en plein air, étals colorés derrière elle",
-    "dans un parc urbain, végétation en arrière-plan",
-    "au bord de l'eau, ciel dégagé de fin de journée",
-    "devant un mur coloré du centre-ville",
-    "dans une cour intérieure ombragée",
-    "sur un balcon donnant sur la ville",
-    "dans un intérieur simple et lumineux, mur uni",
+# Première image de la galerie : le visage doit être lisible, c'est la vignette.
+MAIN_SHOT = (
+    "Selfie tenu à bout de bras, visage bien visible et net, regard vers l'objectif, "
+    "sourire naturel"
+)
+
+# La pose est décrite dans la scène elle-même : séparer les deux produisait des
+# combinaisons impossibles (« appuyée au plan de travail, assise les genoux repliés »).
+SCENES: list[str] = [
+    "selfie assise sur son lit, adossée aux oreillers, chambre en désordre léger derrière elle",
+    "selfie devant le miroir de l'entrée, téléphone visible dans la main, hanche déhanchée",
+    "selfie sur le canapé du salon, genoux repliés sous elle, télévision allumée derrière",
+    "selfie dans la rue, marchant, façades et passants flous derrière elle",
+    "selfie à une table de café, penchée vers l'objectif, tasse posée devant elle",
+    "selfie côté passager d'une voiture, ceinture visible, tête appuyée au dossier",
+    "selfie sur le balcon, accoudée à la rambarde, immeubles et ciel derrière elle",
+    "selfie dans un parc, assise dans l'herbe, une main dans les cheveux",
+    "selfie dans la cuisine, debout appuyée contre le plan de travail",
+    "selfie dans le couloir avant de sortir, sac à l'épaule",
+    "photo prise par quelqu'un d'autre : elle marche dans la rue et se retourne",
+    "selfie assise sur une marche d'escalier, coudes sur les genoux",
 ]
 
 OUTFITS: list[str] = [
-    "tenue de ville simple, chemisier et pantalon",
-    "robe en tissu imprimé aux motifs colorés",
-    "tenue traditionnelle en pagne, coupe moderne",
-    "jean et haut uni, veste légère",
-    "tenue soignée de sortie, coupe sobre",
-    "haut en lin clair, foulard noué",
-    "ensemble décontracté, gilet fin",
+    "t-shirt uni et jean",
+    "sweat à capuche ample",
+    "robe d'été à fleurs",
+    "chemisier léger et pantalon",
+    "pull en maille et leggings",
+    "débardeur et veste en jean",
+    "robe longue en tissu imprimé",
+    "haut à manches longues et jupe midi",
+]
+
+# « {} » reçoit la couleur de cheveux du profil, pour que l'accord soit correct.
+HAIR_STYLES: list[str] = [
+    "cheveux {} bouclés lâchés sur les épaules",
+    "cheveux {} tressés en nattes collées",
+    "cheveux {} lissés attachés en queue-de-cheval",
+    "cheveux {} coupés au carré",
+    "cheveux {} longs et ondulés",
+    "cheveux {} relevés en chignon un peu défait",
+    "locks {} mi-longues",
 ]
 
 LIGHTS: list[str] = [
-    "lumière naturelle du matin",
-    "lumière chaude de fin de journée",
-    "ciel légèrement couvert, lumière diffuse",
-    "lumière d'intérieur douce",
-    "contre-jour léger en fin d'après-midi",
+    "lumière du jour entrant par une fenêtre",
+    "plafonnier d'intérieur, lumière jaune",
+    "plein jour, ciel couvert",
+    "fin d'après-midi, lumière rasante",
+    "éclairage d'intérieur faible, léger grain",
+    "soleil direct, ombres marquées",
 ]
 
 
@@ -104,65 +109,50 @@ class AvatarContext:
     cheveux: str
     variant_index: int
     centres_interet: str = ""
-    style: AvatarStyle = AvatarStyle.ILLUSTRATION
+    style: AvatarStyle = AvatarStyle.PHOTO
     seed: int = field(default=0)
 
     def __post_init__(self) -> None:
-        # Décalage stable par personne : deux profils ne suivent pas la même
-        # séquence de décors, mais un même profil reste reproductible.
-        self.seed = sum(ord(c) for c in self.code_femme)
-
-
-def build_character_sheet(context: AvatarContext) -> str:
-    """Description physique stable, identique sur toutes les variantes."""
-    return (
-        f"Femme adulte fictive d'environ {context.age} ans, "
-        f"yeux {context.yeux.lower()}, cheveux {context.cheveux.lower()}, "
-        f"visage et morphologie identiques d'une image à l'autre. "
-        f"Elle vit à {context.ville} ({context.pays}) et travaille comme "
-        f"{context.profession.lower()}."
-    )
+        # Décalage stable par personne : chaque profil suit sa propre séquence de
+        # décors, mais reste reproductible d'une génération à l'autre.
+        self.seed = sum(ord(c) * (i + 1) for i, c in enumerate(self.code_femme))
 
 
 def _pick(pool: list[str], context: AvatarContext, offset: int) -> str:
-    return pool[(context.seed + context.variant_index * 3 + offset) % len(pool)]
+    return pool[(context.seed + context.variant_index * 5 + offset) % len(pool)]
 
 
-def _interest_hint(context: AvatarContext) -> str:
-    """Rattache le décor à un centre d'intérêt réel du profil, quand il y en a."""
-    interests = [part.strip() for part in context.centres_interet.split(";") if part.strip()]
-    if not interests:
-        return ""
-    chosen = interests[(context.seed + context.variant_index) % len(interests)]
-    return f" Un détail discret du décor évoque son goût pour : {chosen.lower()}."
+def _stable(pool: list[str], context: AvatarContext, offset: int) -> str:
+    """Trait constant sur toutes les images d'une même personne."""
+    return pool[(context.seed + offset) % len(pool)]
 
 
-def build_avatar_prompt(context: AvatarContext) -> str:
-    directive = STYLE_DIRECTIVES[context.style]
-
-    if context.variant_index == 0:
-        scene = (
-            f"{MAIN_SHEET_INTRO} {MAIN_SHOT}, arrière-plan simple et peu contrasté, "
-            f"visage bien éclairé."
-        )
-    else:
-        scene = (
-            f"Prise n°{context.variant_index + 1} : "
-            f"{_pick(FRAMINGS, context, 0)}, "
-            f"{_pick(SETTINGS, context, 1)}. "
-            f"Tenue : {_pick(OUTFITS, context, 2)}. "
-            f"{_pick(LIGHTS, context, 4).capitalize()}."
-            f"{_interest_hint(context)}"
-        )
-
+def build_character_sheet(context: AvatarContext) -> str:
+    """Fiche physique identique sur toutes les images du même profil."""
+    hair = _stable(HAIR_STYLES, context, 0).format(context.cheveux.lower())
     return (
-        f"{directive} Cadre vertical, format 3:4.\n\n"
-        f"Personnage : {build_character_sheet(context)}\n\n"
-        f"{scene}\n\n"
-        f"{NEGATIVE_DIRECTIVE} "
-        "Le personnage est imaginaire : ne reproduis les traits d'aucune personne "
-        "réelle ou célèbre."
+        f"Femme d'environ {context.age} ans, yeux {context.yeux.lower()}, {hair}. "
+        "Même visage, même morphologie et même coiffure sur toutes les images."
     )
 
 
-MAIN_SHEET_INTRO = "Photo principale du profil :"
+def build_avatar_prompt(context: AvatarContext) -> str:
+    directive = (
+        PHOTO_DIRECTIVE if context.style is AvatarStyle.PHOTO else ILLUSTRATION_DIRECTIVE
+    )
+
+    if context.variant_index == 0:
+        scene = f"{MAIN_SHOT}, chez elle, lumière du jour."
+    else:
+        scene = (
+            f"{_pick(SCENES, context, 1).capitalize()}. "
+            f"{_pick(LIGHTS, context, 3).capitalize()}."
+        )
+
+    return (
+        f"{directive} Format vertical 3:4.\n\n"
+        f"{build_character_sheet(context)}\n"
+        f"Tenue : {_pick(OUTFITS, context, 4)}.\n\n"
+        f"{scene}\n\n"
+        f"{NEGATIVE_DIRECTIVE}"
+    )

@@ -158,16 +158,28 @@ def test_avatar_prompts_vary_scene_but_keep_the_character_stable():
         return AvatarContext(
             code_femme=code, age=31, ville="Abidjan", pays="Côte d'Ivoire",
             profession="Infirmière", yeux="Marron", cheveux="Noir",
-            variant_index=index, centres_interet="Cuisine ; Voyages ; Danse",
-            style=AvatarStyle.ILLUSTRATION,
+            variant_index=index, style=AvatarStyle.PHOTO,
         )
 
     prompts = [build_avatar_prompt(make("PAL-0001", i)) for i in range(4)]
-    assert len(set(prompts)) == 4, "chaque variante doit décrire une scène différente"
-    assert all("environ 31 ans, yeux marron, cheveux noir" in p for p in prompts)
-    assert "Photo principale" in prompts[0]
-    # Deux personnes ne doivent pas suivre la même séquence de décors.
+    assert len(set(prompts)) == 4, "chaque image doit décrire une scène différente"
+    # Le personnage — visage, yeux, coiffure — ne bouge pas d'une image à l'autre.
+    sheets = {p.split("\n")[2] for p in prompts}
+    assert len(sheets) == 1, sheets
+    assert "environ 31 ans, yeux marron" in prompts[0]
+    # Deux personnes ne suivent pas la même séquence de décors.
     assert build_avatar_prompt(make("PAL-0002", 1)) != prompts[1]
+
+
+def test_hair_colour_agrees_grammatically():
+    from backend.prompts.avatar_prompt import AvatarContext, build_avatar_prompt
+
+    prompt = build_avatar_prompt(AvatarContext(
+        code_femme="PAL-0007", age=28, ville="Dakar", pays="Sénégal",
+        profession="Comptable", yeux="Noisette", cheveux="Châtain", variant_index=0,
+    ))
+    assert "de couleur" not in prompt
+    assert "châtain" in prompt
 
 
 def test_photo_style_switches_the_rendering_directive():
@@ -179,9 +191,14 @@ def test_photo_style_switches_the_rendering_directive():
     )
     illustration = build_avatar_prompt(AvatarContext(**common, style=AvatarStyle.ILLUSTRATION))
     photo = build_avatar_prompt(AvatarContext(**common, style=AvatarStyle.PHOTO))
-    assert "non photographique" in illustration
-    assert "Photographie de portrait" in photo
-    # Les garde-fous de décence et d'unicité s'appliquent aux deux rendus.
+    assert "Illustration numérique" in illustration
+    assert "prise au téléphone" in photo
+    # Le rendu « photo » ne doit pas retomber dans l'esthétique studio, qui donne
+    # le visage lissé que l'on repère immédiatement.
+    for banni in ("studio", "50 mm", "retouche professionnelle"):
+        assert banni not in photo
+    assert "aucun lissage" in photo
+    # Garde-fous communs aux deux rendus.
     for prompt in (illustration, photo):
         assert "seule sur l'image" in prompt
         assert "aucune personne réelle" in prompt

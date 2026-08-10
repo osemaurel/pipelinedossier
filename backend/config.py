@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # 3:4 vertical, 1200×1600 : le format exact réclamé par le « Lisez-moi » du
     # modèle pour la photo principale.
     openai_image_size: str = Field(default="1200x1600", alias="OPENAI_IMAGE_SIZE")
-    openai_image_style: str = Field(default="illustration", alias="OPENAI_IMAGE_STYLE")
+    openai_image_style: str = Field(default="photo", alias="OPENAI_IMAGE_STYLE")
 
     profile_batch_size: int = Field(default=10, alias="PROFILE_BATCH_SIZE")
     image_concurrency: int = Field(default=3, alias="IMAGE_CONCURRENCY")

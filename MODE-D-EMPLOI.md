@@ -77,26 +77,25 @@ précédentes et permet de les retélécharger.
 
 ## Changer l'aspect des images
 
-Par défaut, les visuels sont des **portraits dessinés**, reconnaissables comme
-des avatars de synthèse. Chaque image d'une même personne change de décor, de
-tenue, de lumière et de cadrage — le visage, lui, reste le même.
+Par défaut, les visuels imitent des **photos personnelles prises au téléphone** :
+selfies dans le salon, la chambre, la rue, au café. Chaque image d'une même
+personne change de lieu, de tenue et d'heure ; le visage et la coiffure, eux, ne
+bougent pas.
 
-Pour obtenir des **portraits photoréalistes** à la place, ouvrez le fichier
-`.env` avec le Bloc-notes et remplacez la ligne :
-
-```
-OPENAI_IMAGE_STYLE=illustration
-```
-
-par :
+Pour repasser à des **portraits dessinés**, ouvrez `.env` avec le Bloc-notes et
+remplacez :
 
 ```
 OPENAI_IMAGE_STYLE=photo
 ```
 
-Enregistrez et relancez. À n'utiliser que si votre plateforme indique clairement
-à ses utilisateurs que les personnages sont générés : une fois le rendu
-photoréaliste activé, plus rien dans l'image ne le signale.
+par :
+
+```
+OPENAI_IMAGE_STYLE=illustration
+```
+
+Enregistrez et relancez.
 
 ---
 
