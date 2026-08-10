@@ -99,10 +99,21 @@ if not exist frontend\node_modules (
   echo.
 )
 
+REM --- Aucune autre instance ne doit tourner ----------------------------------
+
+python scripts\verifier_ports.py
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
+
 REM --- Demarrage --------------------------------------------------------------
 
-start "Palab - moteur" /min .venv\Scripts\uvicorn backend.main:app --port 8000 --log-level warning
-start "Palab - interface" /min cmd /c "cd frontend && npm run dev"
+REM Les sorties partent dans des fichiers : une fenetre minimisee qui se ferme
+REM sur une erreur emporte sinon le seul message exploitable.
+if not exist journaux mkdir journaux
+start "Palab - moteur" /min cmd /c ".venv\Scripts\uvicorn backend.main:app --port 8000 > journaux\moteur.txt 2>&1"
+start "Palab - interface" /min cmd /c "cd frontend && npm run dev > ..\journaux\interface.txt 2>&1"
 
 echo   Demarrage...
 
@@ -129,6 +140,9 @@ echo   Si l'onglet ne s'est pas ouvert : allez sur %URL%
 echo.
 echo   Gardez cette fenetre ouverte pendant que vous travaillez.
 echo   Pour tout arreter : fermez cette fenetre et les deux fenetres "Palab".
+echo.
+echo   En cas de probleme, les messages du moteur sont dans le dossier
+echo   "journaux", fichier moteur.txt.
 echo.
 pause
 exit /b 0

@@ -84,6 +84,13 @@ fi
 
 # --- Démarrage ---------------------------------------------------------------
 
+if ! "$PY" scripts/verifier_ports.py; then
+  echo ""
+  echo "  Appuyez sur Entrée pour fermer."
+  read -r
+  exit 1
+fi
+
 arreter() {
   echo ""
   echo "  Arrêt de l'application."
@@ -92,10 +99,13 @@ arreter() {
 }
 trap arreter INT TERM
 
-./.venv/bin/uvicorn backend.main:app --port 8000 --log-level warning &
+# Les sorties partent aussi dans des fichiers, pour pouvoir relire une erreur
+# après coup plutôt que de la voir défiler.
+mkdir -p journaux
+./.venv/bin/uvicorn backend.main:app --port 8000 > journaux/moteur.txt 2>&1 &
 BACKEND_PID=$!
 
-(cd frontend && npm run dev --silent) &
+(cd frontend && npm run dev > ../journaux/interface.txt 2>&1) &
 FRONTEND_PID=$!
 
 echo "  Démarrage…"

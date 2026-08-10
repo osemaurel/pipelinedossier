@@ -21,3 +21,6 @@ temp/*
 
 # Divers
 .DS_Store
+
+# Journaux produits par les lanceurs
+journaux/

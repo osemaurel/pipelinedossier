@@ -77,8 +77,31 @@ export interface Health {
   openai_configured: boolean
   text_model: string
   image_model: string
-  image_style: string
-  image_size: string
+  // Absents si le moteur qui répond est d'une version antérieure : c'est ce qui
+  // permet de détecter un ancien backend resté en place sur le port 8000.
+  image_style?: string
+  image_size?: string
+}
+
+export const EXPECTED_IMAGE_MODEL = 'gpt-image-2'
+
+export type HealthVerdict =
+  | { kind: 'ok' }
+  | { kind: 'moteur-perime' }
+  | { kind: 'config-perimee'; details: string[] }
+
+export function inspectHealth(health: Health): HealthVerdict {
+  if (health.image_style === undefined || health.image_size === undefined) {
+    return { kind: 'moteur-perime' }
+  }
+  const details: string[] = []
+  if (!health.image_model.includes(EXPECTED_IMAGE_MODEL)) {
+    details.push(`modèle d'images « ${health.image_model} » au lieu de « ${EXPECTED_IMAGE_MODEL} »`)
+  }
+  if (!health.openai_configured) {
+    details.push('clé OpenAI absente')
+  }
+  return details.length ? { kind: 'config-perimee', details } : { kind: 'ok' }
 }
 
 async function unwrap<T>(response: Response): Promise<T> {

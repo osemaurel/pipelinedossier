@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GenerationRequest, Health, JobStatus, UploadResult } from './api'
-import { fetchHealth, resumeJob, startJob, subscribeToJob } from './api'
+import { fetchHealth, inspectHealth, resumeJob, startJob, subscribeToJob } from './api'
 import { ConfigForm } from './components/ConfigForm'
 import { HistoryPage } from './components/HistoryPage'
 import { ProgressPanel, ReportPanel } from './components/ProgressPanel'
@@ -21,6 +21,8 @@ export default function App() {
   useEffect(() => {
     fetchHealth().then(setHealth).catch(() => setHealth(null))
   }, [])
+
+  const verdict = health ? inspectHealth(health) : null
 
   const attach = useCallback((jobId: string) => {
     unsubscribe.current?.()
@@ -79,30 +81,9 @@ export default function App() {
             <p className="mt-1 text-sm text-ink-500">
               Générez automatiquement vos dossiers de collecte.
             </p>
-            {health && (
+            {health && verdict?.kind === 'ok' && (
               <p className="mt-2 font-mono text-xs text-ink-500">
-                Images :{' '}
-                <span
-                  className={
-                    health.image_model.includes('image-1')
-                      ? 'font-semibold text-amber-700'
-                      : 'text-ink-700'
-                  }
-                >
-                  {health.image_model}
-                </span>
-                {' · '}
-                <span
-                  className={
-                    health.image_style === 'photo'
-                      ? 'text-ink-700'
-                      : 'font-semibold text-amber-700'
-                  }
-                >
-                  rendu {health.image_style}
-                </span>
-                {' · '}
-                {health.image_size}
+                Images : {health.image_model} · rendu {health.image_style} · {health.image_size}
               </p>
             )}
           </div>
@@ -131,6 +112,33 @@ export default function App() {
           <HistoryPage />
         ) : (
           <>
+            {verdict?.kind === 'moteur-perime' && (
+              <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-4 text-sm text-red-900">
+                <p className="font-semibold">Le moteur qui répond est une ancienne version.</p>
+                <p className="mt-2 leading-relaxed">
+                  L'interface est à jour, mais elle dialogue avec un moteur lancé depuis un autre
+                  dossier, resté actif sur le port 8000. Les images seront produites à l'ancienne
+                  et certaines actions échoueront.
+                </p>
+                <p className="mt-2 leading-relaxed">
+                  Fermez <strong>toutes</strong> les fenêtres noires « Palab », puis relancez
+                  <code className="mx-1 rounded bg-red-100 px-1">demarrer.bat</code>
+                  depuis le nouveau dossier. En cas de doute, redémarrez l'ordinateur.
+                </p>
+              </div>
+            )}
+
+            {verdict?.kind === 'config-perimee' && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+                <p className="font-semibold">Configuration à corriger dans le fichier .env</p>
+                <ul className="mt-2 list-disc pl-5">
+                  {verdict.details.map((detail) => (
+                    <li key={detail}>{detail}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               Les dossiers produits contiennent des personnages fictifs de démonstration. Les
               colonnes de vérification (pièce d'identité, contrat de mandat, consentement) ne sont
