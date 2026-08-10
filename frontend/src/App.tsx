@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { GenerationRequest, JobStatus, UploadResult } from './api'
-import { resumeJob, startJob, subscribeToJob } from './api'
+import type { GenerationRequest, Health, JobStatus, UploadResult } from './api'
+import { fetchHealth, resumeJob, startJob, subscribeToJob } from './api'
 import { ConfigForm } from './components/ConfigForm'
 import { HistoryPage } from './components/HistoryPage'
 import { ProgressPanel, ReportPanel } from './components/ProgressPanel'
@@ -15,7 +15,12 @@ export default function App() {
   const [upload, setUpload] = useState<UploadResult | null>(null)
   const [status, setStatus] = useState<JobStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [health, setHealth] = useState<Health | null>(null)
   const unsubscribe = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    fetchHealth().then(setHealth).catch(() => setHealth(null))
+  }, [])
 
   const attach = useCallback((jobId: string) => {
     unsubscribe.current?.()
@@ -74,6 +79,32 @@ export default function App() {
             <p className="mt-1 text-sm text-ink-500">
               Générez automatiquement vos dossiers de collecte.
             </p>
+            {health && (
+              <p className="mt-2 font-mono text-xs text-ink-500">
+                Images :{' '}
+                <span
+                  className={
+                    health.image_model.includes('image-1')
+                      ? 'font-semibold text-amber-700'
+                      : 'text-ink-700'
+                  }
+                >
+                  {health.image_model}
+                </span>
+                {' · '}
+                <span
+                  className={
+                    health.image_style === 'photo'
+                      ? 'text-ink-700'
+                      : 'font-semibold text-amber-700'
+                  }
+                >
+                  rendu {health.image_style}
+                </span>
+                {' · '}
+                {health.image_size}
+              </p>
+            )}
           </div>
           <nav className="flex gap-1 rounded-lg bg-ink-100 p-1">
             {([

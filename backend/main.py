@@ -30,10 +30,17 @@ app.include_router(router)
 
 @app.get("/api/health")
 async def health() -> dict[str, object]:
-    """État du serveur. N'expose jamais la clé, seulement sa présence."""
+    """État du serveur. N'expose jamais la clé, seulement sa présence.
+
+    Renvoie aussi la configuration d'images effectivement chargée : c'est le seul
+    moyen simple de vérifier, depuis l'interface, qu'on ne fait pas tourner une
+    ancienne version ou un `.env` périmé.
+    """
     return {
         "status": "ok",
         "openai_configured": bool(settings.openai_api_key),
         "text_model": settings.openai_text_model,
         "image_model": settings.openai_image_model,
+        "image_style": settings.openai_image_style,
+        "image_size": settings.openai_image_size,
     }

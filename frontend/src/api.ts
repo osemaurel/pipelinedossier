@@ -72,12 +72,25 @@ export interface HistoryEntry {
   zip_filename: string | null
 }
 
+export interface Health {
+  status: string
+  openai_configured: boolean
+  text_model: string
+  image_model: string
+  image_style: string
+  image_size: string
+}
+
 async function unwrap<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const detail = await response.json().catch(() => null)
     throw new Error(detail?.detail ?? `Erreur ${response.status}`)
   }
   return response.json() as Promise<T>
+}
+
+export async function fetchHealth(): Promise<Health> {
+  return unwrap<Health>(await fetch('/api/health'))
 }
 
 export async function uploadModel(file: File): Promise<UploadResult> {
