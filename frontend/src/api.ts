@@ -104,10 +104,34 @@ export function inspectHealth(health: Health): HealthVerdict {
   return details.length ? { kind: 'config-perimee', details } : { kind: 'ok' }
 }
 
+/** Message le plus informatif possible : sans détail lisible, on reste aveugle. */
+async function describeFailure(response: Response): Promise<string> {
+  const raw = await response.text().catch(() => '')
+  let detail = ''
+  try {
+    detail = (JSON.parse(raw) as { detail?: string }).detail ?? ''
+  } catch {
+    // Réponse non JSON : page d'erreur de l'hébergeur, proxy, ou HTML.
+    detail = raw.trim().startsWith('<') ? '' : raw.slice(0, 200)
+  }
+
+  if (detail) return detail
+
+  if (response.status === 404) {
+    return (
+      "Erreur 404 — le serveur n'a pas trouvé cette adresse. C'est typiquement le cas " +
+      "pendant un redéploiement : patientez deux minutes, rechargez la page et réessayez."
+    )
+  }
+  if (response.status === 502 || response.status === 503) {
+    return 'Le serveur redémarre. Patientez une minute puis rechargez la page.'
+  }
+  return `Erreur ${response.status} (${response.statusText || 'sans détail'}).`
+}
+
 async function unwrap<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const detail = await response.json().catch(() => null)
-    throw new Error(detail?.detail ?? `Erreur ${response.status}`)
+    throw new Error(await describeFailure(response))
   }
   return response.json() as Promise<T>
 }
