@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -63,8 +63,15 @@ if FRONTEND_DIST.is_dir():
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_frontend(full_path: str) -> FileResponse:
         """Sert l'interface. Les routes /api/* sont déclarées avant et priment."""
-        candidate = FRONTEND_DIST / full_path
-        if full_path and candidate.is_file():
+        # Une route /api inconnue doit rester une erreur JSON : renvoyer la page
+        # de l'application masquerait la cause réelle derrière un écran normal.
+        if full_path.startswith("api/"):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Route inconnue.")
+
+        # Le chemin vient de l'URL : on vérifie qu'il reste sous le dossier servi
+        # avant d'ouvrir quoi que ce soit.
+        candidate = (FRONTEND_DIST / full_path).resolve()
+        if full_path and candidate.is_file() and candidate.is_relative_to(FRONTEND_DIST.resolve()):
             return FileResponse(candidate)
         return FileResponse(FRONTEND_DIST / "index.html")
 

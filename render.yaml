@@ -8,7 +8,15 @@ services:
     dockerfilePath: ./Dockerfile
     plan: starter
     healthCheckPath: /api/health
+    # Disque persistant : sans lui, chaque redéploiement ou redémarrage
+    # emporterait les dossiers déjà produits et leurs téléchargements.
+    disk:
+      name: donnees
+      mountPath: /var/data
+      sizeGB: 5
     envVars:
+      - key: DATA_DIR
+        value: /var/data
       # sync: false => Render réclame la valeur au moment du déploiement.
       # La clé reste côté serveur : elle n'est jamais envoyée au navigateur.
       - key: OPENAI_API_KEY

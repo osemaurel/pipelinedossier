@@ -161,10 +161,47 @@ class JobManager:
             )
             for job in self._jobs.values()
         ]
-        stored = self._load_history()
         known = {entry.job_id for entry in entries}
-        entries.extend(entry for entry in stored if entry.job_id not in known)
+        for entry in self._load_history() + self._scan_outputs():
+            if entry.job_id not in known:
+                known.add(entry.job_id)
+                entries.append(entry)
         return sorted(entries, key=lambda item: item.created_at, reverse=True)
+
+    def _scan_outputs(self) -> list[HistoryEntry]:
+        """Reconstruit l'historique depuis le disque.
+
+        Le registre en mémoire disparaît à chaque redémarrage du serveur ; les
+        dossiers produits, eux, restent. Les relire permet de les retrouver et de
+        les retélécharger après un redéploiement.
+        """
+        directory = self._settings.outputs_dir
+        if not directory.is_dir():
+            return []
+
+        entries: list[HistoryEntry] = []
+        for job_dir in directory.iterdir():
+            if not job_dir.is_dir() or not job_dir.name.startswith("JOB-"):
+                continue
+            excel = next(iter(sorted(job_dir.glob("*.xlsx"))), None)
+            archive = next(iter(sorted(job_dir.glob("*.zip"))), None)
+            if excel is None and archive is None:
+                continue
+            reference = excel or archive
+            assert reference is not None
+            entries.append(
+                HistoryEntry(
+                    job_id=job_dir.name,
+                    created_at=datetime.fromtimestamp(reference.stat().st_mtime),
+                    stage=JobStage.DONE,
+                    profiles=0,
+                    agents=0,
+                    avatars=0,
+                    excel_filename=excel.name if excel else None,
+                    zip_filename=archive.name if archive else None,
+                )
+            )
+        return entries
 
     def _load_history(self) -> list[HistoryEntry]:
         if not self._history_file.exists():

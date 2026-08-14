@@ -90,9 +90,14 @@ génération de 50 profils n'irait pas au bout. Si vous voulez essayer en gratui
 d'abord, changez `plan: starter` en `plan: free` dans `render.yaml`, ou
 choisissez Free dans l'interface de Render.
 
-**Les fichiers produits.** Ils restent disponibles au téléchargement tant que le
-service ne redémarre pas. Téléchargez vos ZIP sans trop attendre : ils ne sont
-pas conservés indéfiniment.
+**Les fichiers produits.** Le service dispose d'un disque persistant de 5 Go :
+vos dossiers survivent aux redémarrages et aux mises à jour, et restent
+téléchargeables depuis l'onglet **Historique**. Pensez tout de même à récupérer
+vos ZIP, le disque n'est pas infini.
+
+**Pendant une mise à jour.** Quand je pousse une correction, Render reconstruit
+le service : il est indisponible deux à trois minutes et les requêtes échouent.
+Attendez le retour du statut **Live**, rechargez la page, et reprenez.
 
 **Le coût des images** reste facturé par OpenAI, sur votre compte, comme avant.
 Render héberge, OpenAI génère.

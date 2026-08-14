@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import uuid
 from pathlib import Path
 from typing import AsyncIterator
@@ -29,6 +30,10 @@ ALLOWED_CONTENT_TYPES = {
     "application/octet-stream",
 }
 ZIP_MAGIC = b"PK\x03\x04"
+
+# L'identifiant vient de l'URL et sert à construire un chemin : on le contraint
+# strictement, sinon un « ../ » ferait sortir du dossier des sorties.
+JOB_ID = re.compile(r"^JOB-\d{8}-[0-9A-F]{4}$")
 
 # Le modèle ne porte pas de liste de pays : elle est proposée ici par défaut et
 # l'utilisateur peut en saisir d'autres depuis l'interface.
@@ -216,28 +221,40 @@ async def get_report(job_id: str, manager: JobManager = Depends(get_manager)) ->
     return job.status.report
 
 
-def _download(job_id: str, filename: str | None, manager: JobManager) -> FileResponse:
-    job = manager.get(job_id)
-    if job is None or not filename:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Fichier indisponible.")
-    path = job.output_dir / filename
-    if not path.exists():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Fichier introuvable sur le serveur.")
-    return FileResponse(path, filename=filename)
+def _download(job_id: str, suffix: str, settings: Settings) -> FileResponse:
+    """Sert un livrable en le cherchant sur le disque, pas dans la mémoire.
+
+    Le registre des jobs ne survit pas à un redémarrage du serveur, alors que les
+    fichiers, eux, restent sur le disque. Résoudre par le disque permet de
+    retélécharger un dossier produit avant un redéploiement.
+    """
+    if not JOB_ID.match(job_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Identifiant de job invalide.")
+
+    job_dir = settings.outputs_dir / job_id
+    candidates = sorted(job_dir.glob(f"*{suffix}")) if job_dir.is_dir() else []
+    if not candidates:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Ce fichier n'est plus disponible sur le serveur. Les dossiers produits "
+                   "avant un redémarrage sont perdus : relancez une génération.",
+        )
+    path = candidates[0]
+    return FileResponse(path, filename=path.name)
 
 
 @router.get("/jobs/{job_id}/download/excel")
 async def download_excel(
-    job_id: str, manager: JobManager = Depends(get_manager)
+    job_id: str, settings: Settings = Depends(get_settings)
 ) -> FileResponse:
-    job = manager.get(job_id)
-    return _download(job_id, job.status.excel_filename if job else None, manager)
+    return _download(job_id, ".xlsx", settings)
 
 
 @router.get("/jobs/{job_id}/download/zip")
-async def download_zip(job_id: str, manager: JobManager = Depends(get_manager)) -> FileResponse:
-    job = manager.get(job_id)
-    return _download(job_id, job.status.zip_filename if job else None, manager)
+async def download_zip(
+    job_id: str, settings: Settings = Depends(get_settings)
+) -> FileResponse:
+    return _download(job_id, ".zip", settings)
 
 
 @router.get("/history", response_model=list[HistoryEntry])

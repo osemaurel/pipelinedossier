@@ -33,9 +33,21 @@ class Settings(BaseSettings):
     max_upload_bytes: int = Field(default=15 * 1024 * 1024, alias="MAX_UPLOAD_BYTES")
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
 
-    uploads_dir: Path = ROOT_DIR / "uploads"
-    outputs_dir: Path = ROOT_DIR / "outputs"
-    temp_dir: Path = ROOT_DIR / "temp"
+    # Racine des données produites. En hébergement, la pointer vers un disque
+    # persistant : sans cela, un redéploiement emporte les dossiers générés.
+    data_dir: Path = Field(default=ROOT_DIR, alias="DATA_DIR")
+
+    @property
+    def uploads_dir(self) -> Path:
+        return self.data_dir / "uploads"
+
+    @property
+    def outputs_dir(self) -> Path:
+        return self.data_dir / "outputs"
+
+    @property
+    def temp_dir(self) -> Path:
+        return self.data_dir / "temp"
 
     @property
     def cors_origin_list(self) -> list[str]:

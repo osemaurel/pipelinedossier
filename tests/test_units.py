@@ -202,3 +202,12 @@ def test_photo_style_switches_the_rendering_directive():
     for prompt in (illustration, photo):
         assert "seule sur l'image" in prompt
         assert "aucune personne réelle" in prompt
+
+
+def test_download_path_is_constrained_to_valid_job_ids():
+    """L'identifiant vient de l'URL et sert à bâtir un chemin : il doit être bridé."""
+    from backend.api.routes import JOB_ID
+
+    assert JOB_ID.match("JOB-20260814-70D1")
+    for hostile in ("../../etc", "JOB-2026/../..", "JOB-20260814-70D1/../..", "", "JOB-x"):
+        assert not JOB_ID.match(hostile), hostile
