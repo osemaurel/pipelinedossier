@@ -1,26 +1,11 @@
-# Docker est optionnel : l'application se lance aussi sans, voir le README.
+# Docker reste optionnel : l'application se lance aussi sans, voir le README.
 services:
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
+  app:
+    build: .
     env_file: .env
-    environment:
-      CORS_ORIGINS: http://localhost:3000
     volumes:
       - ./uploads:/app/uploads
       - ./outputs:/app/outputs
       - ./temp:/app/temp
     ports:
       - "8000:8000"
-
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    environment:
-      VITE_API_PROXY: http://backend:8000
-    depends_on:
-      - backend
-    ports:
-      - "3000:3000"

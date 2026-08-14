@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.api.routes import router
-from backend.config import get_settings
+from backend.config import ROOT_DIR, get_settings
 from backend.core.logging import configure_logging, get_logger
 
 configure_logging()
@@ -44,3 +48,26 @@ async def health() -> dict[str, object]:
         "image_style": settings.openai_image_style,
         "image_size": settings.openai_image_size,
     }
+
+
+# En production, l'interface compilée est servie par le même serveur que l'API :
+# une seule adresse, donc pas de configuration CORS ni de second service à
+# lancer. En développement, ce dossier n'existe pas et Vite prend le relais.
+FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
+
+if FRONTEND_DIST.is_dir():
+    app.mount(
+        "/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets"
+    )
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_frontend(full_path: str) -> FileResponse:
+        """Sert l'interface. Les routes /api/* sont déclarées avant et priment."""
+        candidate = FRONTEND_DIST / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(FRONTEND_DIST / "index.html")
+
+    logger.info("Interface servie depuis %s", FRONTEND_DIST)
+else:
+    logger.info("Interface compilée absente : mode développement (Vite sur le port 3000).")

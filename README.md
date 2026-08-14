@@ -12,6 +12,20 @@ modifié.
 
 ---
 
+## Deux façons de l'utiliser
+
+**En ligne, sans rien installer** — voir [METTRE-EN-LIGNE.md](METTRE-EN-LIGNE.md).
+Le dépôt contient un `render.yaml` : Render construit l'image, ne réclame que la
+clé OpenAI et publie l'application à une adresse unique. C'est la voie
+recommandée pour un usage non technique, et les mises à jour se déploient toutes
+seules.
+
+**En local** — voir [MODE-D-EMPLOI.md](MODE-D-EMPLOI.md) pour la version sans
+jargon, ou les instructions ci-dessous.
+
+En production, le serveur Python sert aussi l'interface compilée : une seule
+adresse, un seul service, pas de configuration CORS.
+
 ## Installation
 
 ```bash

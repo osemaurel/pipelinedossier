@@ -1,0 +1,27 @@
+# Déploiement en un clic sur Render (https://render.com).
+# « New » → « Blueprint » → choisir ce dépôt. Render lit ce fichier, ne demande
+# que la clé OpenAI, et publie l'application à une adresse publique.
+services:
+  - type: web
+    name: palab-dossier-generator
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      # sync: false => Render réclame la valeur au moment du déploiement.
+      # La clé reste côté serveur : elle n'est jamais envoyée au navigateur.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_TEXT_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_IMAGE_MODEL
+        value: gpt-image-2
+      - key: OPENAI_IMAGE_SIZE
+        value: 1200x1600
+      - key: OPENAI_IMAGE_STYLE
+        value: photo
+      - key: IMAGE_CONCURRENCY
+        value: "3"
+      - key: PROFILE_BATCH_SIZE
+        value: "10"
