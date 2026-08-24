@@ -211,3 +211,41 @@ def test_download_path_is_constrained_to_valid_job_ids():
     assert JOB_ID.match("JOB-20260814-70D1")
     for hostile in ("../../etc", "JOB-2026/../..", "JOB-20260814-70D1/../..", "", "JOB-x"):
         assert not JOB_ID.match(hostile), hostile
+
+
+def _avatar(code: str, variant: int):
+    from backend.prompts.avatar_prompt import AvatarContext
+
+    return AvatarContext(
+        code_femme=code, age=30, ville="Abidjan", pays="Côte d'Ivoire",
+        profession="Infirmière", yeux="Marron", cheveux="Noir", variant_index=variant,
+    )
+
+
+def test_neighbouring_profiles_never_share_an_outfit():
+    """Régression : un pas régulier entre codes retombait sur la même tenue.
+
+    `seed` progressait de 8 exactement d'un profil au suivant et la liste des
+    tenues comptait 8 entrées : toutes les femmes recevaient la même.
+    """
+    from backend.prompts.avatar_prompt import OUTFITS, build_outfit
+
+    cuts = [build_outfit(_avatar(f"PAL-{n:04d}", 0)).split(" en ")[0].split(" dans ")[0]
+            for n in range(1, 201)]
+    assert not any(a == b for a, b in zip(cuts, cuts[1:])), "deux voisines habillées pareil"
+    assert len(set(cuts[: len(OUTFITS)])) == len(OUTFITS), "le catalogue n'est pas parcouru"
+
+
+def test_a_profile_never_repeats_an_outfit_across_its_photos():
+    from backend.prompts.avatar_prompt import build_outfit
+
+    for number in range(1, 51):
+        tenues = {build_outfit(_avatar(f"PAL-{number:04d}", v)) for v in range(4)}
+        assert len(tenues) == 4, f"PAL-{number:04d} répète une tenue"
+
+
+def test_scenes_also_spread_across_neighbouring_profiles():
+    from backend.prompts.avatar_prompt import SCENES, _varying
+
+    decors = [_varying(SCENES, _avatar(f"PAL-{n:04d}", 1), "decor") for n in range(1, 101)]
+    assert not any(a == b for a, b in zip(decors, decors[1:]))
