@@ -55,7 +55,9 @@ Copiez `.env.example` vers `.env` à la racine, puis renseignez votre clé :
 ```env
 OPENAI_API_KEY=sk-...
 OPENAI_TEXT_MODEL=gpt-4.1-mini
-OPENAI_IMAGE_MODEL=gpt-image-1
+OPENAI_IMAGE_MODEL=gpt-image-2
+OPENAI_IMAGE_SIZE=1200x1600
+OPENAI_IMAGE_STYLE=photo
 ```
 
 La clé reste côté serveur. Le frontend n'y a jamais accès : il appelle le backend,
@@ -124,8 +126,7 @@ Par ailleurs, tout dossier produit est marqué comme fictif :
 
 - e-mails en `example.test` (domaine réservé, RFC 6761) et téléphones en `+99` ;
 - `Notes internes` portant « PERSONNAGE FICTIF » sur chaque ligne ;
-- avatars illustrés, non photographiques, avec provenance IA inscrite dans les
-  métadonnées PNG ;
+- provenance IA inscrite dans les métadonnées PNG de chaque visuel ;
 - `README.txt` inclus dans l'archive.
 
 ---
@@ -158,7 +159,7 @@ pipelinedossier/
 │   ├── api.ts
 │   └── components/
 ├── tests/
-├── uploads/  outputs/  temp/
+├── uploads/  outputs/  temp/     sous DATA_DIR (disque persistant en ligne)
 └── docker-compose.yml
 ```
 
@@ -184,6 +185,12 @@ colonnes détectées : listes déroulantes converties en `enum`, propriétés to
 requises, `additionalProperties: false`. Les longueurs sont revérifiées côté
 backend après génération ; un texte hors bornes est réécrit par le modèle, puis en
 dernier recours coupé sur une frontière de phrase — jamais au milieu d'une idée.
+
+**Avatars.** `OPENAI_IMAGE_STYLE` choisit le rendu : `photo` (défaut) vise
+l'esthétique d'une photo prise au téléphone — lumière ambiante, texture de peau
+conservée, cadrage spontané ; `illustration` produit des portraits dessinés. La
+fiche physique du personnage reste stable sur toutes ses images, seuls le décor,
+la tenue, la lumière et le cadrage changent.
 
 **Coûts.** Les profils sont générés par lots (`PROFILE_BATCH_SIZE`, 10 par
 défaut) et les images avec un parallélisme borné (`IMAGE_CONCURRENCY`).
