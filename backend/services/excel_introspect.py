@@ -31,8 +31,10 @@ _HEADER_MAX = re.compile(r"(\d+)\s*caract", re.IGNORECASE)
 _HEADER_RANGE = re.compile(r"(\d+)\s*(?:à|a|-)\s*(\d+)\s*caract", re.IGNORECASE)
 _HEADER_ITEMS_MAX = re.compile(r"(\d+)\s*max", re.IGNORECASE)
 
-EXAMPLE_MARKERS = ("exemple",)
-EXAMPLE_FILL = "FFF8E1"
+# Marqueur précis plutôt que le simple mot « exemple » : une ligne de données
+# réelle peut contenir ce mot, et la confondre avec l'exemple ferait ignorer un
+# profil déjà saisi lors de la reprise de numérotation.
+EXAMPLE_MARKERS = ("ligne d exemple",)
 
 
 def normalize(text: object) -> str:
@@ -75,10 +77,27 @@ class SheetSchema:
     data_end_row: int
     example_row: int | None
     columns: list[ColumnSchema]
+    # Lignes déjà renseignées par un humain, ligne d'exemple exclue.
+    filled_rows: list[int] = field(default_factory=list)
+    existing_codes: list[str] = field(default_factory=list)
 
     @property
     def capacity(self) -> int:
         return self.data_end_row - self.data_start_row + 1
+
+    @property
+    def first_free_row(self) -> int:
+        """Première ligne libre : on écrit à la suite, jamais par-dessus."""
+        return max(self.filled_rows) + 1 if self.filled_rows else self.data_start_row
+
+    def next_number(self, pattern: re.Pattern[str]) -> int:
+        """Numéro suivant le plus grand déjà attribué dans la colonne des codes."""
+        numbers = [
+            int(match.group(1))
+            for code in self.existing_codes
+            if (match := pattern.match(code))
+        ]
+        return max(numbers) + 1 if numbers else 1
 
     def by_key(self, key: str) -> ColumnSchema | None:
         for column in self.columns:
@@ -138,17 +157,16 @@ def _detect_header_row(ws: Worksheet, limit: int = 6) -> int:
 
 
 def _detect_example_row(ws: Worksheet, header_row: int) -> int | None:
-    """Repère la ligne d'exemple par son marqueur textuel, sinon par sa couleur."""
+    """Repère la ligne d'exemple à son marqueur « LIGNE D'EXEMPLE »."""
     for row in range(header_row + 1, min(header_row + 4, ws.max_row) + 1):
         for col in range(1, ws.max_column + 1):
             value = ws.cell(row=row, column=col).value
-            if isinstance(value, str) and any(m in value.lower() for m in EXAMPLE_MARKERS):
+            if isinstance(value, str) and any(m in normalize(value) for m in EXAMPLE_MARKERS):
                 return row
-    for row in range(header_row + 1, min(header_row + 4, ws.max_row) + 1):
-        cell = ws.cell(row=row, column=1)
-        rgb = getattr(cell.fill.fgColor, "rgb", None)
-        if isinstance(rgb, str) and rgb.upper().endswith(EXAMPLE_FILL):
-            return row
+    # Pas de repli sur la couleur de fond : une ligne d'exemple effacée puis
+    # réutilisée pour de vraies données garde sa teinte, et la prendre pour un
+    # exemple rendrait ce profil invisible aux contrôles de doublon. Se tromper
+    # dans l'autre sens est sans danger : on écrit simplement à la suite.
     return None
 
 
@@ -313,6 +331,7 @@ def _read_sheet(wb: Workbook, ws: Worksheet) -> SheetSchema:
             )
         )
 
+    filled_rows, existing_codes = _read_existing(ws, data_start, data_end, example_row)
     return SheetSchema(
         name=ws.title,
         header_row=header_row,
@@ -320,7 +339,30 @@ def _read_sheet(wb: Workbook, ws: Worksheet) -> SheetSchema:
         data_end_row=data_end,
         example_row=example_row,
         columns=columns,
+        filled_rows=filled_rows,
+        existing_codes=existing_codes,
     )
+
+
+def _read_existing(
+    ws: Worksheet, start: int, end: int, example_row: int | None
+) -> tuple[list[int], list[str]]:
+    """Lignes déjà saisies et codes qu'elles portent.
+
+    La ligne d'exemple est écartée : elle porte un code d'illustration
+    (« PAL-0001 ») qui fausserait la reprise de la numérotation.
+    """
+    rows: list[int] = []
+    codes: list[str] = []
+    for row in range(start, min(end, ws.max_row) + 1):
+        if row == example_row:
+            continue
+        value = ws.cell(row=row, column=1).value
+        if value is None or not str(value).strip():
+            continue
+        rows.append(row)
+        codes.append(str(value).strip())
+    return rows, codes
 
 
 def _read_listes(ws: Worksheet) -> dict[str, list[str]]:

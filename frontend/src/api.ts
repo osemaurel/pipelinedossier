@@ -13,6 +13,10 @@ export interface UploadResult {
   text_rules: Record<string, (number | null)[]>
   enums: Record<string, string[]>
   withheld: string[]
+  existing_profiles: number
+  existing_agents: number
+  suggested_start: number
+  first_free_row: number
   default_countries: string[]
 }
 
@@ -26,6 +30,7 @@ export interface GenerationRequest {
   professions: string[]
   age_min: number
   age_max: number
+  start_number: number | null
   field_filters: Record<string, string[]>
 }
 

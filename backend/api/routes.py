@@ -18,6 +18,7 @@ from backend.core.logging import get_logger
 from backend.models.schemas import GenerationRequest, HistoryEntry, JobStatus, ValidationReport
 from backend.services.excel_introspect import introspect
 from backend.services.field_policy import FillMode, build_femme_specs, generated_specs
+from backend.services.validation_service import CODE_FEMME
 from backend.services.job_manager import JobManager
 
 logger = get_logger(__name__)
@@ -63,6 +64,11 @@ class UploadResult(BaseModel):
     text_rules: dict[str, list[int | None]]
     enums: dict[str, list[str]]
     withheld: list[str]
+    # Reprise de la numérotation quand le classeur contient déjà des profils.
+    existing_profiles: int
+    existing_agents: int
+    suggested_start: int
+    first_free_row: int
     default_countries: list[str] = DEFAULT_COUNTRIES
 
 
@@ -124,8 +130,16 @@ async def upload_model(
         spec.column.header for spec in specs if spec.mode is FillMode.WITHHELD
     ]
 
-    logger.info("Modèle « %s » accepté (upload %s)", file.filename, upload_id)
+    suggested_start = schema.femmes.next_number(CODE_FEMME)
+    logger.info(
+        "Modèle « %s » accepté (upload %s) — %d profils déjà présents, reprise à PAL-%04d",
+        file.filename, upload_id, len(schema.femmes.existing_codes), suggested_start,
+    )
     return UploadResult(
+        existing_profiles=len(schema.femmes.existing_codes),
+        existing_agents=len(schema.agents.existing_codes),
+        suggested_start=suggested_start,
+        first_free_row=schema.femmes.first_free_row,
         upload_id=upload_id,
         filename=file.filename or "modele.xlsx",
         sheets=schema.sheet_names,

@@ -24,8 +24,11 @@ from backend.services.field_policy import FieldSpec, FillMode, generated_specs
 
 logger = get_logger(__name__)
 
-CODE_FEMME = re.compile(r"^PAL-\d{4}$")
-CODE_AGENT = re.compile(r"^AG-\d{2}$")
+# Le groupe de capture sert à reprendre la numérotation là où le classeur
+# s'arrête. Le nombre de chiffres n'est pas figé : au-delà de PAL-9999 le code
+# s'allonge sans cesser d'être valide.
+CODE_FEMME = re.compile(r"^PAL-(\d{4,})$")
+CODE_AGENT = re.compile(r"^AG-(\d{2,})$")
 FILENAME = re.compile(r"^PAL-\d{4}_avatar_\d{2}\.png$")
 
 
@@ -44,6 +47,7 @@ class Validator:
         reference: date,
         expected_per_profile: int,
         image_failures: dict[str, str],
+        existing_codes: list[str] | None = None,
     ) -> ValidationReport:
         report = ValidationReport(
             profiles=len(profiles), agents=len(agents), avatars=len(photos)
@@ -53,6 +57,7 @@ class Validator:
         report.checks.append(f"✓ {len(photos)} avatars générés")
 
         self._check_codes(profiles, agents, report)
+        self._check_against_existing(profiles, existing_codes or [], report)
         self._check_dates_and_ages(profiles, reference, report)
         self._check_allowed_values(profiles, report)
         self._check_text_lengths(profiles, report)
@@ -104,6 +109,29 @@ class Validator:
                 message=f"profils rattachés à un agent inexistant : {', '.join(orphans[:5])}"))
         else:
             report.checks.append("✓ tous les codes agent référencés existent")
+
+    def _check_against_existing(
+        self, profiles: list[Profile], existing: list[str], report: ValidationReport
+    ) -> None:
+        """Aucun code produit ne doit reprendre un code déjà porté dans le classeur.
+
+        C'est le seul contrôle qui regarde au-delà du lot en cours : ni la
+        validation interne ni les formules du modèle ne détectent une collision
+        avec un dossier antérieur.
+        """
+        if not existing:
+            return
+        known = set(existing)
+        clashes = sorted({p.code_femme for p in profiles if p.code_femme in known})
+        if clashes:
+            report.issues.append(ValidationIssue(
+                severity="erreur", scope="codes",
+                message=f"{len(clashes)} code(s) déjà utilisés dans le classeur déposé : "
+                        f"{', '.join(clashes[:5])}"))
+        else:
+            report.checks.append(
+                f"✓ aucun conflit avec les {len(known)} codes déjà présents"
+            )
 
     def _check_dates_and_ages(
         self, profiles: list[Profile], reference: date, report: ValidationReport

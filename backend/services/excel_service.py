@@ -149,13 +149,17 @@ class ExcelWriter:
         photo_counts: dict[str, int],
     ) -> int:
         sheet = self._schema.femmes
-        _reset_example_row(ws, sheet)
+        start = sheet.first_free_row
+        # La ligne d'exemple n'est neutralisée que si on écrit dessus. Quand le
+        # classeur contient déjà des profils, rien au-dessus n'est touché.
+        if not sheet.filled_rows:
+            _reset_example_row(ws, sheet)
         template_row = sheet.data_end_row
         columns = len(sheet.columns)
-        last_row = sheet.data_start_row
+        last_row = start
 
         for offset, profile in enumerate(profiles):
-            row = sheet.data_start_row + offset
+            row = start + offset
             last_row = row
             _prepare_row(ws, row, template_row, columns)
             for spec in specs:
@@ -200,14 +204,16 @@ class ExcelWriter:
         self, ws: Worksheet, agents: list[Agent], specs: list[FieldSpec], femmes_end: int
     ) -> None:
         sheet = self._schema.agents
-        _reset_example_row(ws, sheet)
+        start = sheet.first_free_row
+        if not sheet.filled_rows:
+            _reset_example_row(ws, sheet)
         template_row = sheet.data_end_row
         columns = len(sheet.columns)
         femmes_start = self._schema.femmes.data_start_row
 
-        last_row = sheet.data_start_row
+        last_row = start
         for offset, agent in enumerate(agents):
-            row = sheet.data_start_row + offset
+            row = start + offset
             last_row = row
             _prepare_row(ws, row, template_row, columns)
             for spec in specs:
@@ -248,7 +254,9 @@ class ExcelWriter:
     def _write_photos(self, ws: Worksheet, photos: list[PhotoRow]) -> None:
         sheet = self._schema.photos
         assert sheet is not None
-        _reset_example_row(ws, sheet)
+        start = sheet.first_free_row
+        if not sheet.filled_rows:
+            _reset_example_row(ws, sheet)
         template_row = sheet.data_end_row
         columns = len(sheet.columns)
 
@@ -259,7 +267,7 @@ class ExcelWriter:
         notes_col = sheet.find("notes")
 
         for offset, photo in enumerate(photos):
-            row = sheet.data_start_row + offset
+            row = start + offset
             _prepare_row(ws, row, template_row, columns)
             for column, value in (
                 (code_col, photo.code_femme),

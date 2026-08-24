@@ -33,7 +33,7 @@ from backend.services.field_policy import build_agent_specs, build_femme_specs
 from backend.services.image_generator import ImageGenerator
 from backend.services.openai_service import OpenAIService
 from backend.services.profile_generator import ProfileGenerator, assign_agents
-from backend.services.validation_service import Validator
+from backend.services.validation_service import CODE_AGENT, CODE_FEMME, Validator
 from backend.services.zip_service import build_archive
 
 logger = get_logger(__name__)
@@ -288,10 +288,20 @@ class JobManager:
         generator = ProfileGenerator(openai, settings)
         cached_agents, cached_profiles = job.load_checkpoint()
 
+        # Reprise de la numérotation : on n'écrase ni ne réutilise un code déjà
+        # attribué dans le classeur déposé.
+        femme_start = request.start_number or schema.femmes.next_number(CODE_FEMME)
+        agent_start = schema.agents.next_number(CODE_AGENT)
+        if schema.femmes.existing_codes:
+            job.status.messages.append(
+                f"{len(schema.femmes.existing_codes)} profils déjà présents : "
+                f"la numérotation reprend à PAL-{femme_start:04d}"
+            )
+
         job.enter(JobStage.AGENTS, "Génération des agents")
         agent_count = request.resolved_agent_count()
         agents = cached_agents or await generator.generate_agents(
-            request, agent_specs, agent_count
+            request, agent_specs, agent_count, start_number=agent_start
         )
         job.save_checkpoint(agents, cached_profiles)
 
@@ -305,7 +315,7 @@ class JobManager:
 
         profiles = await generator.generate_profiles(
             request, schema, femme_specs, agents, reference,
-            on_batch=on_batch, already_done=cached_profiles,
+            on_batch=on_batch, already_done=cached_profiles, start_number=femme_start,
         )
         assign_agents(profiles, agents)
         job.status.profiles_done = len(profiles)
@@ -333,7 +343,7 @@ class JobManager:
         report: ValidationReport = validator.run(
             profiles=profiles, agents=agents, photos=photos, photos_dir=job.photos_dir,
             reference=reference, expected_per_profile=request.avatars_per_profile,
-            image_failures=failures,
+            image_failures=failures, existing_codes=schema.femmes.existing_codes,
         )
         job.status.report = report
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { GenerationRequest, UploadResult } from '../api'
 
 interface Props {
@@ -84,6 +84,13 @@ export function ConfigForm({ upload, busy, onSubmit }: Props) {
   const [ageMax, setAgeMax] = useState(45)
   const [filters, setFilters] = useState<Record<string, string[]>>({})
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [startNumber, setStartNumber] = useState(upload.suggested_start)
+
+  // Le classeur fait foi : un nouveau dépôt réaligne le point de départ.
+  useEffect(() => setStartNumber(upload.suggested_start), [upload.suggested_start])
+
+  const code = (value: number) => `PAL-${String(value).padStart(4, '0')}`
+  const startsTooLow = startNumber < upload.suggested_start
 
   const resolvedAgents = autoAgents
     ? Math.max(1, Math.min(profileCount, Math.round(profileCount / 10) || 1))
@@ -103,6 +110,7 @@ export function ConfigForm({ upload, busy, onSubmit }: Props) {
     professions,
     age_min: ageMin,
     age_max: ageMax,
+    start_number: startNumber,
     field_filters: filters,
   })
 
@@ -217,6 +225,27 @@ export function ConfigForm({ upload, busy, onSubmit }: Props) {
               onChange={(event) => setAgeMax(Number(event.target.value))}
             />
           </div>
+
+          <div>
+            <label className="label" htmlFor="start">Premier numéro</label>
+            <input
+              id="start"
+              type="number"
+              min={1}
+              className="input"
+              value={startNumber}
+              onChange={(event) => setStartNumber(Number(event.target.value))}
+            />
+            <p className="mt-2 text-xs text-ink-500">
+              {code(startNumber)} → {code(startNumber + profileCount - 1)}
+            </p>
+            {startsTooLow && (
+              <p className="mt-1 text-xs font-medium text-red-700">
+                Des codes de ce classeur vont jusqu'à {code(upload.suggested_start - 1)} :
+                vous créeriez des doublons.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
@@ -327,6 +356,13 @@ export function ConfigForm({ upload, busy, onSubmit }: Props) {
           <div>
             <p className="text-2xl font-semibold">{profileCount * avatars}</p>
             <p className="text-sm text-ink-500">avatars</p>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold">
+              {code(startNumber)} <span className="text-ink-300">→</span>{' '}
+              {code(startNumber + profileCount - 1)}
+            </p>
+            <p className="text-sm text-ink-500">codes attribués</p>
           </div>
         </div>
 

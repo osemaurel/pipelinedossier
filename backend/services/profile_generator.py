@@ -140,9 +140,13 @@ class ProfileGenerator:
         self._settings = settings
 
     async def generate_agents(
-        self, request: GenerationRequest, specs: list[FieldSpec], count: int
+        self,
+        request: GenerationRequest,
+        specs: list[FieldSpec],
+        count: int,
+        start_number: int = 1,
     ) -> list[Agent]:
-        codes = [f"AG-{index:02d}" for index in range(1, count + 1)]
+        codes = [f"AG-{index:02d}" for index in range(start_number, start_number + count)]
         schema = build_json_schema(specs, "agents")
         payload = await self._openai.structured_json(
             system_prompt=AGENT_SYSTEM_PROMPT,
@@ -195,6 +199,7 @@ class ProfileGenerator:
         reference: date,
         on_batch: Callable[[list[Profile]], Awaitable[None]] | None = None,
         already_done: list[Profile] | None = None,
+        start_number: int = 1,
     ) -> list[Profile]:
         profiles: list[Profile] = list(already_done or [])
         filters = request.field_filters
@@ -248,7 +253,7 @@ class ProfileGenerator:
 
             batch: list[Profile] = []
             for offset, item in enumerate(items):
-                index = len(profiles) + offset + 1
+                index = start_number + len(profiles) + offset
                 profile = self._materialise(item, index, agents, oldest, youngest, reference)
                 batch.append(profile)
 

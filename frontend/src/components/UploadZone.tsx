@@ -94,6 +94,21 @@ export function UploadZone({ result, onUploaded }: Props) {
             </div>
           </dl>
 
+          {result.existing_profiles > 0 && (
+            <p className="mt-3 rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs leading-relaxed text-emerald-900">
+              <span className="font-medium">
+                {result.existing_profiles} profil{result.existing_profiles > 1 ? 's' : ''} déjà
+                présent{result.existing_profiles > 1 ? 's' : ''} dans ce classeur.
+              </span>{' '}
+              Les nouveaux seront ajoutés à partir de la ligne {result.first_free_row}, sans
+              rien écraser, et la numérotation reprendra à{' '}
+              <span className="font-mono font-medium">
+                PAL-{String(result.suggested_start).padStart(4, '0')}
+              </span>
+              .
+            </p>
+          )}
+
           {result.withheld.length > 0 && (
             <p className="mt-3 border-t border-emerald-200 pt-3 text-xs leading-relaxed text-emerald-800">
               <span className="font-medium">Colonnes non renseignées automatiquement :</span>{' '}

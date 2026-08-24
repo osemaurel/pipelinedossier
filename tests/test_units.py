@@ -15,6 +15,7 @@ from backend.services.field_policy import (
     spec_by_name,
 )
 from backend.services.image_generator import stamp_provenance
+from backend.services.validation_service import CODE_FEMME
 from backend.services.profile_generator import (
     birth_window,
     build_json_schema,
@@ -249,3 +250,71 @@ def test_scenes_also_spread_across_neighbouring_profiles():
 
     decors = [_varying(SCENES, _avatar(f"PAL-{n:04d}", 1), "decor") for n in range(1, 101)]
     assert not any(a == b for a, b in zip(decors, decors[1:]))
+
+
+def _fill(path: Path, codes: list[str], start_row: int, clear_example: bool) -> Path:
+    from openpyxl import load_workbook
+
+    wb = load_workbook(path)
+    ws = wb["Femmes"]
+    if clear_example:
+        for column in range(1, 46):
+            ws.cell(row=3, column=column).value = None
+    for offset, code in enumerate(codes):
+        ws.cell(row=start_row + offset, column=1, value=code)
+    wb.save(path)
+    return path
+
+
+def test_blank_template_has_no_existing_profile(schema):
+    """La ligne d'exemple porte PAL-0001 : la compter fausserait la reprise."""
+    assert schema.femmes.example_row == 3
+    assert schema.femmes.existing_codes == []
+    assert schema.femmes.first_free_row == 3
+    assert schema.femmes.next_number(CODE_FEMME) == 1
+
+
+def test_numbering_resumes_after_the_last_existing_code(tmp_path):
+    import shutil
+
+    target = shutil.copy(TEMPLATE, tmp_path / "rempli.xlsx")
+    _fill(Path(target), [f"PAL-{n:04d}" for n in range(1, 6)], 3, clear_example=True)
+
+    filled = introspect(Path(target))
+    assert filled.femmes.existing_codes == [f"PAL-{n:04d}" for n in range(1, 6)]
+    assert filled.femmes.first_free_row == 8, "on écrirait par-dessus une ligne remplie"
+    assert filled.femmes.next_number(CODE_FEMME) == 6
+
+
+def test_data_kept_when_the_example_row_is_left_in_place(tmp_path):
+    import shutil
+
+    target = shutil.copy(TEMPLATE, tmp_path / "avec_exemple.xlsx")
+    _fill(Path(target), ["PAL-0010", "PAL-0011"], 4, clear_example=False)
+
+    filled = introspect(Path(target))
+    assert filled.femmes.example_row == 3, "l'exemple doit rester reconnu"
+    assert filled.femmes.existing_codes == ["PAL-0010", "PAL-0011"]
+    assert filled.femmes.next_number(CODE_FEMME) == 12
+
+
+def test_existing_codes_are_flagged_as_conflicts(schema):
+    from backend.models.schemas import Profile
+    from backend.services.validation_service import ValidationReport, Validator
+
+    validator = Validator(schema, build_femme_specs(schema.femmes))
+    report = ValidationReport()
+    profile = Profile(
+        code_femme="PAL-0003", code_agent="AG-01", nom_legal_complet="X",
+        date_naissance="1995-01-01", nationalite="Ivoirienne",
+        pays_residence="Côte d'Ivoire", ville_residence="Abidjan", prenom_affiche="X",
+        ville_affichee="Abidjan", pays_affiche="Côte d'Ivoire", langues="Français",
+        situation="Célibataire", enfants="Non", profession="Infirmière",
+        niveau_etudes="Licence", taille_cm=165, poids_kg=60, yeux="Marron",
+        cheveux="Noir", religion="Chrétienne", tabac="Non", alcool="Non",
+        centres_interet="Cuisine", type_relation="Mariage", age_recherche_min=30,
+        age_recherche_max=45, prete_a_demenager="Oui", accroche="a" * 50,
+        presentation="b" * 700, recherche="c" * 250,
+    )
+    validator._check_against_existing([profile], ["PAL-0003"], report)
+    assert report.errors, "une collision avec un code existant doit être une erreur"

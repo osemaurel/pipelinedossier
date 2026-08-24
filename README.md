@@ -195,6 +195,14 @@ la tenue, la lumière et le cadrage changent.
 **Coûts.** Les profils sont générés par lots (`PROFILE_BATCH_SIZE`, 10 par
 défaut) et les images avec un parallélisme borné (`IMAGE_CONCURRENCY`).
 
+**Numérotation.** Un classeur déjà rempli est complété, jamais écrasé : les
+lignes saisies sont relevées, l'écriture démarre à la première ligne libre et la
+numérotation reprend après le plus grand code présent. La ligne d'exemple est
+reconnue à son marqueur « LIGNE D'EXEMPLE » et exclue du décompte, sans quoi son
+`PAL-0001` d'illustration fausserait la reprise. `start_number` permet de forcer
+un autre point de départ ; la validation refuse tout code entrant en collision
+avec ceux du classeur, seul contrôle qui regarde au-delà du lot en cours.
+
 **Reprise.** Chaque lot terminé est écrit sur disque. Un job interrompu se relance
 via `POST /api/jobs/{job_id}/resume` (bouton « Reprendre » dans l'interface) et ne
 régénère ni les profils déjà produits ni les avatars déjà présents.

@@ -46,6 +46,9 @@ class GenerationRequest(BaseModel):
     professions: list[str] = Field(default_factory=list)
     age_min: int = Field(default=25, ge=18, le=99)
     age_max: int = Field(default=45, ge=18, le=99)
+    # Premier numéro de code femme. Vide = reprendre après le plus grand code
+    # déjà présent dans le classeur déposé.
+    start_number: int | None = Field(default=None, ge=1, le=999_999)
     # Options avancées : restreint une liste du modèle à un sous-ensemble choisi.
     # Clé = nom canonique du champ (situation, niveau_etudes, type_relation…).
     field_filters: dict[str, list[str]] = Field(default_factory=dict)
