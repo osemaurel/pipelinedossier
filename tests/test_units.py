@@ -465,3 +465,78 @@ def test_images_still_produced_when_the_edit_endpoint_refuses(tmp_path):
     assert len(rows) == 5, "le repli doit produire toutes les photos"
     assert not failures
     assert len(fake.generated) == 5, "chaque photo retombe sur une génération décrite"
+
+
+def _text_profile(presentation: str, recherche: str):
+    from backend.models.schemas import Profile
+
+    return Profile(
+        code_femme="PAL-0001", code_agent="AG-01", nom_legal_complet="A B",
+        date_naissance="1996-01-01", nationalite="Ivoirienne",
+        pays_residence="Côte d'Ivoire", ville_residence="Abidjan", prenom_affiche="A",
+        ville_affichee="Abidjan", pays_affiche="Côte d'Ivoire", langues="Français",
+        situation="Célibataire", enfants="Non", profession="Infirmière",
+        niveau_etudes="Licence", taille_cm=168, poids_kg=62, yeux="Marron",
+        cheveux="Noir", religion="Chrétienne", tabac="Non", alcool="Non",
+        centres_interet="Cuisine", type_relation="Mariage", age_recherche_min=30,
+        age_recherche_max=45, prete_a_demenager="Oui", accroche="a" * 50,
+        presentation=presentation, recherche=recherche,
+    )
+
+
+def test_presentation_naming_the_city_or_country_is_caught():
+    from backend.services.text_rules import presentation_mentions_place
+
+    assert presentation_mentions_place(
+        _text_profile("Je vis à Abidjan depuis toujours.", "Un homme sincère.")
+    ) == "Abidjan"
+    assert presentation_mentions_place(
+        _text_profile("Mon pays, la Côte d'Ivoire, me manque.", "Un homme sincère.")
+    ) == "Côte d'Ivoire"
+    assert presentation_mentions_place(
+        _text_profile("Je travaille à l'hôpital et je lis le soir.", "Un homme sincère.")
+    ) is None
+
+
+def test_sought_age_is_caught_in_every_form():
+    from backend.services.text_rules import recherche_mentions_age
+
+    for text in (
+        "Je cherche un homme de 40 ans.",
+        "Quelqu'un entre 35 et 50 ans.",
+        "Un homme dans la quarantaine.",
+        "Un homme de quarante ans environ.",
+    ):
+        assert recherche_mentions_age(_text_profile("Rien de particulier.", text)), text
+
+    assert recherche_mentions_age(
+        _text_profile("Rien.", "Un homme honnête, drôle et présent.")
+    ) is None
+
+
+def test_a_sought_relationship_length_is_not_mistaken_for_an_age():
+    """« depuis 10 ans » parle d'une durée, pas de l'âge recherché."""
+    from backend.services.text_rules import recherche_mentions_age
+
+    # La règle reste volontairement stricte : mieux vaut réécrire un texte
+    # correct que d'en laisser passer un fautif. On documente le comportement.
+    assert recherche_mentions_age(_text_profile("Rien.", "Une relation qui dure 10 ans."))
+
+
+def test_last_resort_drops_the_sentence_without_breaking_the_text():
+    from backend.services.profile_generator import drop_sentence_with
+
+    kept = drop_sentence_with(
+        "Je travaille à l'hôpital. Je vis à Abidjan depuis toujours. J'aime cuisiner.",
+        "Abidjan", 30,
+    )
+    assert "Abidjan" not in kept
+    assert kept.startswith("Je travaille") and "cuisiner" in kept
+
+
+def test_last_resort_keeps_the_text_when_dropping_would_break_the_minimum():
+    """Un champ trop court est refusé par le modèle : mieux vaut le signaler."""
+    from backend.services.profile_generator import drop_sentence_with
+
+    original = "Je vis à Abidjan. J'aime lire."
+    assert drop_sentence_with(original, "Abidjan", 25) == original

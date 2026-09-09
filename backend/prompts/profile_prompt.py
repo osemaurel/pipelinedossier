@@ -112,8 +112,37 @@ Longueurs de texte — comptées en caractères, espaces compris :
 Rappels de rédaction :
 - `accroche` : une phrase, sans point final obligatoire, qui dit qui elle est.
 - `presentation` : parcours, quotidien, ce qui compte pour elle. Première personne.
+  INTERDIT d'y nommer sa ville ou son pays, ni d'y faire allusion — pas de
+  « ici à Abidjan », pas de « dans mon pays », pas de quartier ni de région.
+  Ces informations figurent déjà dans des colonnes dédiées.
 - `recherche` : le type de relation et de personne recherchée. Première personne.
+  INTERDIT d'y mentionner un âge, sous quelque forme que ce soit : ni « un homme
+  de 40 ans », ni « entre 35 et 50 ans », ni « la quarantaine », ni « plus âgé
+  que moi ». L'âge recherché est porté par deux colonnes séparées.
+  Décris un caractère et une attente, pas un critère chiffré.
 {avoid}"""
+
+
+def build_content_fix_prompt(field: str, text: str, rule: str, low: int | None, high: int) -> str:
+    """Réécriture d'un texte qui enfreint une règle de contenu.
+
+    Utilisée quand le modèle a glissé une information proscrite malgré la
+    consigne : plutôt que de signaler le problème, on fait corriger le texte.
+    """
+    length = f"entre {low} et {high}" if low else f"au maximum {high}"
+    return f"""\
+Le texte ci-dessous enfreint une règle : {rule}
+
+Réécris-le en supprimant ce qui est proscrit, sans le remplacer par une
+périphrase qui dirait la même chose. Garde la même personne grammaticale, le
+même ton et le reste du contenu. Longueur attendue : {length} caractères, en
+terminant sur une phrase complète. Renvoie uniquement le texte réécrit, sans
+guillemets ni commentaire.
+
+Champ : {field}
+
+Texte :
+{text}"""
 
 
 def build_length_fix_prompt(field: str, text: str, low: int | None, high: int) -> str:

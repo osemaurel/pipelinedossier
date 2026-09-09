@@ -21,6 +21,7 @@ from backend.models.schemas import (
 )
 from backend.services.excel_introspect import WorkbookSchema
 from backend.services.field_policy import FieldSpec, FillMode, generated_specs
+from backend.services.text_rules import presentation_mentions_place, recherche_mentions_age
 
 logger = get_logger(__name__)
 
@@ -62,6 +63,7 @@ class Validator:
         self._check_allowed_values(profiles, report)
         self._check_text_lengths(profiles, report)
         self._check_completeness(profiles, report)
+        self._check_content_rules(profiles, report)
         self._check_photos(profiles, photos, photos_dir, expected_per_profile, report)
 
         for code, reason in image_failures.items():
@@ -222,6 +224,37 @@ class Validator:
                 message=f"{len(incomplete)} profil(s) incomplet(s) : {', '.join(incomplete[:5])}"))
         else:
             report.checks.append("✓ 0 profil incomplet")
+
+    def _check_content_rules(
+        self, profiles: list[Profile], report: ValidationReport
+    ) -> None:
+        """Dernier filet après les réécritures : rien ne doit passer en silence."""
+        places = [
+            f"{p.code_femme} ({presentation_mentions_place(p)})"
+            for p in profiles
+            if presentation_mentions_place(p)
+        ]
+        ages = [
+            f"{p.code_femme} ({recherche_mentions_age(p)})"
+            for p in profiles
+            if recherche_mentions_age(p)
+        ]
+
+        if places:
+            report.issues.append(ValidationIssue(
+                severity="avertissement", scope="textes",
+                message=f"{len(places)} présentation(s) nomment encore la ville ou le pays : "
+                        f"{', '.join(places[:5])}"))
+        else:
+            report.checks.append("✓ aucune présentation ne nomme la ville ou le pays")
+
+        if ages:
+            report.issues.append(ValidationIssue(
+                severity="avertissement", scope="textes",
+                message=f"{len(ages)} texte(s) « ce que je recherche » mentionnent un âge : "
+                        f"{', '.join(ages[:5])}"))
+        else:
+            report.checks.append("✓ aucun texte de recherche ne mentionne d'âge")
 
     def _check_photos(
         self,

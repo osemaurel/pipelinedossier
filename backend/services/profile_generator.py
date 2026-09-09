@@ -21,18 +21,21 @@ from backend.prompts.profile_prompt import (
     SYSTEM_PROMPT,
     ProfileBatchContext,
     build_agent_prompt,
+    build_content_fix_prompt,
     build_length_fix_prompt,
     build_profile_prompt,
 )
 from backend.services.excel_introspect import WorkbookSchema
 from backend.services.field_policy import FieldSpec, FillMode, generated_specs
 from backend.services.openai_service import OpenAIService
+from backend.services.text_rules import find_violations
 
 logger = get_logger(__name__)
 
 INTEGER_FIELDS = {"taille_cm", "poids_kg", "age_recherche_min", "age_recherche_max"}
 TEXT_FIELDS = ("accroche", "presentation", "recherche")
 MAX_LENGTH_REPAIRS = 2
+MAX_CONTENT_REPAIRS = 2
 
 
 def _json_type(name: str) -> str:
@@ -258,6 +261,7 @@ class ProfileGenerator:
                 batch.append(profile)
 
             await self._enforce_lengths(batch, length_rules)
+            await self._enforce_content_rules(batch, length_rules)
             profiles.extend(batch)
             logger.info(
                 "Profils %d-%d terminés (%d/%d)",
@@ -315,6 +319,55 @@ class ProfileGenerator:
             profile.age_recherche_max = profile.age_recherche_min + 15
         return profile
 
+    async def _enforce_content_rules(
+        self, batch: list[Profile], rules: dict[str, tuple[int | None, int | None]]
+    ) -> None:
+        """Fait réécrire les textes qui enfreignent une règle de contenu.
+
+        La consigne figure déjà dans le prompt, mais elle n'est pas tenue à tous
+        les coups : on vérifie et on corrige au lieu de livrer le texte fautif.
+        """
+        await asyncio.gather(*(self._fix_content(profile, rules) for profile in batch))
+
+    async def _fix_content(
+        self, profile: Profile, rules: dict[str, tuple[int | None, int | None]]
+    ) -> None:
+        for _ in range(MAX_CONTENT_REPAIRS):
+            violations = find_violations(profile)
+            if not violations:
+                return
+            for violation in violations:
+                low, high = rules.get(violation.field, (None, None))
+                if not high:
+                    continue
+                logger.info(
+                    "%s : %s contient « %s », réécriture.",
+                    profile.code_femme, violation.field, violation.excerpt,
+                )
+                rewritten = await self._openai.plain_text(
+                    system_prompt="Tu réécris des textes de profil en respectant "
+                                  "des règles de contenu et une longueur imposée.",
+                    user_prompt=build_content_fix_prompt(
+                        violation.field,
+                        str(getattr(profile, violation.field, "")),
+                        violation.rule,
+                        low,
+                        high,
+                    ),
+                )
+                if rewritten:
+                    setattr(profile, violation.field, rewritten.strip().strip('"'))
+
+        # Dernier recours : retirer la phrase fautive, sans casser le texte.
+        for violation in find_violations(profile):
+            low, _ = rules.get(violation.field, (None, None))
+            current = str(getattr(profile, violation.field, ""))
+            setattr(
+                profile,
+                violation.field,
+                drop_sentence_with(current, violation.excerpt, low),
+            )
+
     async def _enforce_lengths(
         self, batch: list[Profile], rules: dict[str, tuple[int | None, int | None]]
     ) -> None:
@@ -349,6 +402,27 @@ class ProfileGenerator:
         text = str(getattr(profile, field, ""))
         if len(text) > high:
             setattr(profile, field, sentence_safe_trim(text, high))
+
+
+def _split_sentences(text: str) -> list[str]:
+    return [part for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+
+
+def drop_sentence_with(text: str, excerpt: str, minimum: int | None = None) -> str:
+    """Retire la phrase portant la mention proscrite, si le texte y survit.
+
+    Effacer le seul mot fautif produisait du français cassé — « Je vis à depuis
+    toujours ». Retirer la phrase entière garde un texte lisible ; si cela
+    passait sous la longueur minimale du modèle, on préfère conserver le texte
+    et laisser la validation le signaler plutôt que livrer un champ invalide.
+    """
+    kept = [s for s in _split_sentences(text) if excerpt.lower() not in s.lower()]
+    trimmed = " ".join(kept).strip()
+    if not trimmed:
+        return text
+    if minimum and len(trimmed) < minimum:
+        return text
+    return trimmed
 
 
 def _safe_date(value: str, fallback: date) -> date:

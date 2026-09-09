@@ -186,6 +186,14 @@ requises, `additionalProperties: false`. Les longueurs sont revérifiées côté
 backend après génération ; un texte hors bornes est réécrit par le modèle, puis en
 dernier recours coupé sur une frontière de phrase — jamais au milieu d'une idée.
 
+**Règles de contenu.** La présentation ne doit nommer ni la ville ni le pays, et
+le texte « ce que je recherche » ne doit mentionner aucun âge : ces informations
+ont leurs propres colonnes. La consigne figure au prompt, mais `text_rules.py`
+la vérifie côté serveur — un prompt n'est pas une garantie. Un texte fautif est
+réécrit, et en dernier recours la phrase en cause est retirée, sauf si le texte
+passerait alors sous la longueur minimale du modèle : mieux vaut un champ
+signalé qu'un champ invalide. Le rapport de validation porte les deux contrôles.
+
 **Avatars.** `OPENAI_IMAGE_STYLE` choisit le rendu : `photo` (défaut) vise
 l'esthétique d'une photo prise au téléphone — lumière ambiante, texture de peau
 conservée, cadrage spontané ; `illustration` produit des portraits dessinés.
