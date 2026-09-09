@@ -152,24 +152,98 @@ def test_stamp_provenance_ignores_non_png():
     assert stamp_provenance(b"pas une image") == b"pas une image"
 
 
-def test_avatar_prompts_vary_scene_but_keep_the_character_stable():
-    from backend.prompts.avatar_prompt import AvatarContext, AvatarStyle, build_avatar_prompt
+def _avatar_ctx(code: str, variant: int):
+    from backend.prompts.avatar_prompt import AvatarContext, AvatarStyle
 
-    def make(code: str, index: int) -> AvatarContext:
-        return AvatarContext(
-            code_femme=code, age=31, ville="Abidjan", pays="Côte d'Ivoire",
-            profession="Infirmière", yeux="Marron", cheveux="Noir",
-            variant_index=index, style=AvatarStyle.PHOTO,
-        )
+    return AvatarContext(
+        code_femme=code, age=31, ville="Abidjan", pays="Côte d'Ivoire",
+        profession="Infirmière", yeux="Marron", cheveux="Noir", variant_index=variant,
+        style=AvatarStyle.PHOTO, taille_cm=168, poids_kg=62, nationalite="Ivoirienne",
+    )
 
-    prompts = [build_avatar_prompt(make("PAL-0001", i)) for i in range(4)]
-    assert len(set(prompts)) == 4, "chaque image doit décrire une scène différente"
-    # Le personnage — visage, yeux, coiffure — ne bouge pas d'une image à l'autre.
-    sheets = {p.split("\n")[2] for p in prompts}
-    assert len(sheets) == 1, sheets
-    assert "environ 31 ans, yeux marron" in prompts[0]
-    # Deux personnes ne suivent pas la même séquence de décors.
-    assert build_avatar_prompt(make("PAL-0002", 1)) != prompts[1]
+
+def _sheet_of(prompt: str) -> str:
+    """La fiche personnage est le deuxième bloc du prompt."""
+    return prompt.split("\n\n")[1]
+
+
+def test_character_sheet_is_identical_across_a_profiles_photos():
+    """Le visage dérivait d'une image à l'autre : la fiche doit être figée."""
+    from backend.prompts.avatar_prompt import build_avatar_prompt
+
+    sheets = {_sheet_of(build_avatar_prompt(_avatar_ctx("PAL-0001", i))) for i in range(8)}
+    assert len(sheets) == 1, "la description physique change d'une photo à l'autre"
+
+
+def test_character_sheet_pins_complexion_and_build():
+    """Sans carnation ni corpulence, la même femme sortait claire puis foncée."""
+    from backend.prompts.avatar_prompt import build_character_sheet
+
+    sheet = build_character_sheet(_avatar_ctx("PAL-0001", 0))
+    assert "Carnation :" in sheet and "peau" in sheet
+    assert "Corpulence :" in sheet and "168 cm" in sheet
+    assert "Visage :" in sheet
+    assert "Ne modifie ni la couleur de peau" in sheet
+
+
+def test_build_follows_height_and_weight():
+    """La corpulence vient de la taille et du poids du dossier, pas du hasard."""
+    from backend.prompts.avatar_prompt import AvatarContext, build_character_sheet
+
+    def sheet(taille: int, poids: int) -> str:
+        return build_character_sheet(AvatarContext(
+            code_femme="PAL-0001", age=31, ville="Abidjan", pays="Côte d'Ivoire",
+            profession="Infirmière", yeux="Marron", cheveux="Noir", variant_index=0,
+            taille_cm=taille, poids_kg=poids, nationalite="Ivoirienne",
+        ))
+
+    assert "mince" in sheet(175, 52)
+    assert "moyenne" in sheet(168, 62)
+    assert "forte" in sheet(160, 85)
+
+
+def test_eight_photos_are_not_eight_selfies():
+    """Demander huit photos donnait huit selfies : les prises doivent alterner."""
+    from backend.prompts.avatar_prompt import build_scene
+
+    scenes = [build_scene(_avatar_ctx("PAL-0001", i)) for i in range(8)]
+    selfies = [s for s in scenes if s.lower().startswith("selfie")]
+    assert len(set(scenes)) == 8, "deux photos partagent la même scène"
+    assert 2 <= len(selfies) <= 5, f"{len(selfies)} selfies sur 8"
+
+
+def test_lighting_matches_the_setting():
+    """Une scène de rue éclairée au plafonnier trahit immédiatement l'image."""
+    from backend.prompts.avatar_prompt import (
+        CANDID_SCENES, LIGHTS_INDOOR, LIGHTS_OUTDOOR, build_scene,
+    )
+
+    indoor = {light.lower() for light in LIGHTS_INDOOR}
+    outdoor = {light.lower() for light in LIGHTS_OUTDOOR}
+    for code in ("PAL-0001", "PAL-0002", "PAL-0007", "PAL-0042"):
+        for variant in range(1, 9):
+            scene = build_scene(_avatar_ctx(code, variant))
+            body, _, light = scene.rpartition(". ")
+            light = light.rstrip(".").lower()
+            is_outdoor = any(
+                text.lower() in body.lower() and flag for text, flag in CANDID_SCENES
+            ) or any(
+                word in body.lower()
+                for word in ("rue", "marché", "parc", "arrêt de bus", "bord de l'eau",
+                             "balcon", "voiture", "mur coloré", "escalier")
+            )
+            pool = outdoor if is_outdoor else indoor
+            assert light in pool | indoor | outdoor
+            if is_outdoor:
+                assert light not in indoor - outdoor, f"{code}/{variant} : {scene}"
+
+
+def test_scenes_spread_across_neighbouring_profiles():
+    from backend.prompts.avatar_prompt import CANDID_SCENES, _varying_index
+
+    picks = [_varying_index(len(CANDID_SCENES), _avatar_ctx(f"PAL-{n:04d}", 1), "candide")
+             for n in range(1, 101)]
+    assert not any(a == b for a, b in zip(picks, picks[1:]))
 
 
 def test_hair_colour_agrees_grammatically():
@@ -245,11 +319,6 @@ def test_a_profile_never_repeats_an_outfit_across_its_photos():
         assert len(tenues) == 4, f"PAL-{number:04d} répète une tenue"
 
 
-def test_scenes_also_spread_across_neighbouring_profiles():
-    from backend.prompts.avatar_prompt import SCENES, _varying
-
-    decors = [_varying(SCENES, _avatar(f"PAL-{n:04d}", 1), "decor") for n in range(1, 101)]
-    assert not any(a == b for a, b in zip(decors, decors[1:]))
 
 
 def _fill(path: Path, codes: list[str], start_row: int, clear_example: bool) -> Path:
@@ -318,3 +387,81 @@ def test_existing_codes_are_flagged_as_conflicts(schema):
     )
     validator._check_against_existing([profile], ["PAL-0003"], report)
     assert report.errors, "une collision avec un code existant doit être une erreur"
+
+
+class _FakeOpenAI:
+    """Faux service : compte les appels et peut refuser la retouche."""
+
+    def __init__(self, edit_fails: bool = False) -> None:
+        self.edit_fails = edit_fails
+        self.generated: list[str] = []
+        self.edited: list[str] = []
+
+    async def image_png(self, prompt: str) -> bytes:
+        self.generated.append(prompt)
+        return b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+    async def image_png_from_reference(self, prompt: str, reference: bytes) -> bytes:
+        if self.edit_fails:
+            raise RuntimeError("retouche non servie par cette passerelle")
+        assert reference, "la référence doit être transmise"
+        self.edited.append(prompt)
+        return b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+
+def _profile_for_images():
+    from backend.models.schemas import Profile
+
+    return Profile(
+        code_femme="PAL-0001", code_agent="AG-01", nom_legal_complet="A B",
+        date_naissance="1996-04-08", nationalite="Ivoirienne",
+        pays_residence="Côte d'Ivoire", ville_residence="Abidjan", prenom_affiche="A",
+        ville_affichee="Abidjan", pays_affiche="Côte d'Ivoire", langues="Français",
+        situation="Célibataire", enfants="Non", profession="Infirmière",
+        niveau_etudes="Licence", taille_cm=168, poids_kg=62, yeux="Marron",
+        cheveux="Noir", religion="Chrétienne", tabac="Non", alcool="Non",
+        centres_interet="Cuisine", type_relation="Mariage", age_recherche_min=30,
+        age_recherche_max=45, prete_a_demenager="Oui", accroche="a" * 50,
+        presentation="b" * 700, recherche="c" * 250,
+    )
+
+
+def _run_images(fake, per_profile: int, tmp_path):
+    import asyncio
+
+    from backend.config import Settings
+    from backend.services.image_generator import ImageGenerator
+
+    settings = Settings(OPENAI_API_KEY="k", OPENAI_IMAGE_STYLE="photo")
+    generator = ImageGenerator.__new__(ImageGenerator)
+    generator._openai = fake
+    generator._semaphore = asyncio.Semaphore(4)
+    generator._style = __import__(
+        "backend.prompts.avatar_prompt", fromlist=["AvatarStyle"]
+    ).AvatarStyle.PHOTO
+    return asyncio.run(
+        generator.generate_for_profiles(
+            [_profile_for_images()], per_profile, tmp_path / "photos", date.today()
+        )
+    )
+
+
+def test_photos_after_the_first_are_anchored_on_it(tmp_path):
+    """Le visage dérivait sur huit images : les suivantes partent de la première."""
+    fake = _FakeOpenAI()
+    rows, failures = _run_images(fake, 8, tmp_path)
+
+    assert len(rows) == 8 and not failures
+    assert len(fake.generated) == 1, "seule la première photo est décrite de zéro"
+    assert len(fake.edited) == 7, "les sept autres doivent partir de la référence"
+    assert all("même visage" in prompt.lower() for prompt in fake.edited)
+
+
+def test_images_still_produced_when_the_edit_endpoint_refuses(tmp_path):
+    """Une passerelle sans retouche ne doit pas priver le dossier de photos."""
+    fake = _FakeOpenAI(edit_fails=True)
+    rows, failures = _run_images(fake, 5, tmp_path)
+
+    assert len(rows) == 5, "le repli doit produire toutes les photos"
+    assert not failures
+    assert len(fake.generated) == 5, "chaque photo retombe sur une génération décrite"

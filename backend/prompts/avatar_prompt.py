@@ -12,6 +12,7 @@ ses images. La variété vient du lieu, de la tenue, de la pose et de l'heure.
 from __future__ import annotations
 
 import re
+import unicodedata
 import zlib
 from dataclasses import dataclass
 from enum import Enum
@@ -52,21 +53,76 @@ MAIN_SHOT = (
     "sourire naturel"
 )
 
-# La pose est décrite dans la scène elle-même : séparer les deux produisait des
+# Deux familles de prises, alternées à la génération. Une galerie entièrement
+# composée de selfies ne ressemble pas à un album de photos personnelles.
+# La pose est décrite dans la scène : séparer les deux produisait des
 # combinaisons impossibles (« appuyée au plan de travail, assise les genoux repliés »).
-SCENES: list[str] = [
-    "selfie assise sur son lit, adossée aux oreillers, chambre en désordre léger derrière elle",
-    "selfie devant le miroir de l'entrée, téléphone visible dans la main, hanche déhanchée",
-    "selfie sur le canapé du salon, genoux repliés sous elle, télévision allumée derrière",
-    "selfie dans la rue, marchant, façades et passants flous derrière elle",
-    "selfie à une table de café, penchée vers l'objectif, tasse posée devant elle",
-    "selfie côté passager d'une voiture, ceinture visible, tête appuyée au dossier",
-    "selfie sur le balcon, accoudée à la rambarde, immeubles et ciel derrière elle",
-    "selfie dans un parc, assise dans l'herbe, une main dans les cheveux",
-    "selfie dans la cuisine, debout appuyée contre le plan de travail",
-    "selfie dans le couloir avant de sortir, sac à l'épaule",
-    "photo prise par quelqu'un d'autre : elle marche dans la rue et se retourne",
-    "selfie assise sur une marche d'escalier, coudes sur les genoux",
+SELFIE_SCENES: list[tuple[str, bool]] = [
+    ("selfie assise sur son lit, adossée aux oreillers, chambre en désordre léger derrière elle", False),
+    ("selfie devant le miroir en pied de l'entrée, téléphone visible dans la main", False),
+    ("selfie sur le canapé du salon, genoux repliés sous elle, télévision allumée derrière", False),
+    ("selfie à une table de café, penchée vers l'objectif, tasse posée devant elle", False),
+    ("selfie côté passager d'une voiture, ceinture visible, tête appuyée au dossier", True),
+    ("selfie sur le balcon, accoudée à la rambarde, immeubles et ciel derrière elle", True),
+    ("selfie dans la cuisine, debout appuyée contre le plan de travail", False),
+    ("selfie dans le couloir avant de sortir, sac à l'épaule", False),
+]
+
+# Photos prises par quelqu'un d'autre : cadrages plus larges, sujet non centré,
+# regard souvent ailleurs. C'est ce qui donne l'épaisseur d'un vrai album.
+CANDID_SCENES: list[tuple[str, bool]] = [
+    ("photo en pied prise par une amie, elle marche dans une rue commerçante et se retourne", True),
+    ("photo prise de loin, assise sur un banc dans un parc, regard vers l'horizon", True),
+    ("photo à table au restaurant, saisie en train de rire, verres et assiettes autour", False),
+    ("photo en pied devant un mur coloré, bras le long du corps, posture décontractée", True),
+    ("photo prise en marchant sur un marché, étals et passants autour d'elle", True),
+    ("photo assise sur une marche d'escalier, plan large, coudes sur les genoux", True),
+    ("photo au bord de l'eau, tournée vers l'objectif, plan taille", True),
+    ("photo dans un salon avec une amie hors champ, elle est assise et regarde de côté", False),
+    ("photo en pied à l'arrêt de bus, sac à l'épaule, ville autour", True),
+    ("photo prise pendant une fête de famille, plan poitrine, guirlandes en arrière-plan", False),
+]
+
+# Carnations, tirées de façon stable par profil et cohérentes avec la région.
+# Sans cette précision, la même femme sortait claire sur une image et foncée sur
+# une autre : le modèle n'avait aucune contrainte de peau.
+COMPLEXIONS_AFRIQUE_OUEST: list[str] = [
+    "peau noire profonde",
+    "peau noire, teinte ébène",
+    "peau brun foncé",
+    "peau brun moyen",
+    "peau brun chaud, sous-ton doré",
+]
+COMPLEXIONS_MAGHREB: list[str] = [
+    "peau mate, sous-ton olive",
+    "peau brun clair",
+    "peau claire hâlée",
+]
+MAGHREB = {"maroc", "tunisie", "algerie", "libye", "egypte"}
+
+# Traits stables par personne : sans repères précis, chaque image redessinait un
+# visage différent.
+FACE_SHAPES: list[str] = [
+    "visage ovale aux pommettes hautes",
+    "visage rond aux joues pleines",
+    "visage en cœur, menton fin",
+    "visage allongé, mâchoire douce",
+    "visage carré, mâchoire marquée",
+]
+FEATURES: list[str] = [
+    "nez droit et fin, lèvres pleines",
+    "nez large, lèvres bien dessinées",
+    "nez court et retroussé, bouche menue",
+    "nez aquilin, lèvres fines",
+    "nez droit, lèvres charnues et arc de Cupidon marqué",
+]
+MARKS: list[str] = [
+    "un grain de beauté sous l'œil gauche",
+    "des fossettes quand elle sourit",
+    "un petit espace entre les incisives",
+    "des sourcils épais et bien dessinés",
+    "une fine cicatrice au-dessus du sourcil droit",
+    "des taches de rousseur discrètes sur les pommettes",
 ]
 
 # Silhouettes franchement distinctes : une liste trop homogène donnait
@@ -122,13 +178,18 @@ HAIR_STYLES: list[str] = [
     "locks {} mi-longues",
 ]
 
-LIGHTS: list[str] = [
+LIGHTS_INDOOR: list[str] = [
     "lumière du jour entrant par une fenêtre",
     "plafonnier d'intérieur, lumière jaune",
+    "éclairage d'intérieur faible, léger grain",
+    "lampe de chevet allumée, ambiance chaude",
+]
+
+LIGHTS_OUTDOOR: list[str] = [
     "plein jour, ciel couvert",
     "fin d'après-midi, lumière rasante",
-    "éclairage d'intérieur faible, léger grain",
     "soleil direct, ombres marquées",
+    "début de matinée, lumière claire",
 ]
 
 
@@ -144,6 +205,17 @@ class AvatarContext:
     variant_index: int
     centres_interet: str = ""
     style: AvatarStyle = AvatarStyle.PHOTO
+    # Le classeur porte déjà taille et poids : les ignorer laissait la
+    # corpulence changer d'une image à l'autre.
+    taille_cm: int = 0
+    poids_kg: int = 0
+    nationalite: str = ""
+
+
+def normalise(text: str) -> str:
+    """Sans accents ni casse, pour comparer un pays quelle que soit sa graphie."""
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).lower()
 
 
 def _hash(*parts: str) -> int:
@@ -176,16 +248,15 @@ def _profile_number(code: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _varying(pool: list[str], context: AvatarContext, salt: str) -> str:
-    """Choix propre à chaque image, étalé entre profils voisins.
+def _varying_index(size: int, context: AvatarContext, salt: str) -> int:
+    """Rang tiré pour cette image, étalé entre profils voisins.
 
     Un tirage par empreinte répartit bien en moyenne, mais forme des grappes :
-    trois femmes sur douze recevaient la même coupe, et ce sont précisément les
-    voisines d'une galerie qui se ressemblaient. Numéroter les profils et avancer
-    d'un pas premier avec la taille de la liste parcourt tout le catalogue avant
-    de revenir au début, ce qui rend deux profils consécutifs toujours distincts.
+    trois femmes sur douze partageaient une coupe, et ce sont justement les
+    voisines d'une galerie qui se remarquent. Numéroter les profils et avancer
+    d'un pas premier avec la taille de la liste balaie tout le catalogue avant
+    de reboucler, ce qui rend deux profils consécutifs toujours distincts.
     """
-    size = len(pool)
     number = _profile_number(context.code_femme)
     stride = _coprime(_hash(salt, "pas-profil"), size)
     if number is None:
@@ -193,15 +264,60 @@ def _varying(pool: list[str], context: AvatarContext, salt: str) -> str:
     else:
         base = (number * stride + _hash(salt) % size) % size
     step = _coprime(_hash(context.code_femme, salt, "pas-image"), size)
-    return pool[(base + context.variant_index * step) % size]
+    return (base + context.variant_index * step) % size
+
+
+def _varying(pool: list[str], context: AvatarContext, salt: str) -> str:
+    """Entrée tirée pour cette image, selon la même répartition étalée."""
+    return pool[_varying_index(len(pool), context, salt)]
+
+
+def _build(context: AvatarContext) -> str:
+    """Corpulence déduite de la taille et du poids réellement portés au dossier."""
+    if context.taille_cm <= 0 or context.poids_kg <= 0:
+        return "silhouette moyenne"
+    imc = context.poids_kg / (context.taille_cm / 100) ** 2
+    if imc < 19:
+        silhouette = "silhouette mince, épaules étroites"
+    elif imc < 25:
+        silhouette = "silhouette moyenne, proportions équilibrées"
+    elif imc < 30:
+        silhouette = "silhouette pulpeuse, hanches marquées"
+    else:
+        silhouette = "silhouette forte, corpulence généreuse"
+    return f"{context.taille_cm} cm, {silhouette}"
+
+
+def _complexion(context: AvatarContext) -> str:
+    origine = normalise(f"{context.pays} {context.nationalite}")
+    palette = (
+        COMPLEXIONS_MAGHREB
+        if any(pays in origine for pays in MAGHREB)
+        else COMPLEXIONS_AFRIQUE_OUEST
+    )
+    return _stable(palette, context, "carnation")
 
 
 def build_character_sheet(context: AvatarContext) -> str:
-    """Fiche physique identique sur toutes les images du même profil."""
+    """Fiche physique identique sur toutes les images du même profil.
+
+    Elle est volontairement détaillée : carnation, corpulence et traits du visage
+    étaient absents, et rien n'empêchait le modèle de redessiner une personne
+    différente à chaque image.
+    """
     hair = _stable(HAIR_STYLES, context, "coiffure").format(context.cheveux.lower())
     return (
-        f"Femme d'environ {context.age} ans, yeux {context.yeux.lower()}, {hair}. "
-        "Même visage, même morphologie et même coiffure sur toutes les images."
+        f"TOUJOURS LA MÊME FEMME, trait pour trait, sur toutes les images de cette série.\n"
+        f"- Âge : environ {context.age} ans\n"
+        f"- Carnation : {_complexion(context)}, identique sur chaque image\n"
+        f"- Corpulence : {_build(context)}, identique sur chaque image\n"
+        f"- Visage : {_stable(FACE_SHAPES, context, 'visage')}, "
+        f"{_stable(FEATURES, context, 'traits')}\n"
+        f"- Yeux : {context.yeux.lower()}\n"
+        f"- Cheveux : {hair}\n"
+        f"- Signe particulier : {_stable(MARKS, context, 'signe')}\n"
+        f"Ne modifie ni la couleur de peau, ni la corpulence, ni la forme du visage "
+        f"d'une image à l'autre."
     )
 
 
@@ -212,23 +328,56 @@ def build_outfit(context: AvatarContext) -> str:
     return f"{cut} {fabric}"
 
 
+def build_scene(context: AvatarContext) -> str:
+    """Alterne selfies et photos prises par un tiers.
+
+    Choisir dans une liste unique donnait huit selfies quand on demandait huit
+    photos : l'alternance est imposée par le rang de l'image, pas laissée au
+    hasard du tirage. La lumière suit le décor — une scène de rue éclairée au
+    plafonnier trahissait immédiatement l'image.
+    """
+    if context.variant_index == 0:
+        return f"{MAIN_SHOT}, chez elle, lumière du jour."
+
+    candid = context.variant_index % 2 == 1
+    pool = CANDID_SCENES if candid else SELFIE_SCENES
+    index = _varying_index(len(pool), context, "candide" if candid else "selfie")
+    scene, outdoor = pool[index]
+    lights = LIGHTS_OUTDOOR if outdoor else LIGHTS_INDOOR
+    light = lights[_varying_index(len(lights), context, "lumiere")]
+    return f"{scene.capitalize()}. {light.capitalize()}."
+
+
 def build_avatar_prompt(context: AvatarContext) -> str:
     directive = (
         PHOTO_DIRECTIVE if context.style is AvatarStyle.PHOTO else ILLUSTRATION_DIRECTIVE
     )
-
-    if context.variant_index == 0:
-        scene = f"{MAIN_SHOT}, chez elle, lumière du jour."
-    else:
-        scene = (
-            f"{_varying(SCENES, context, 'decor').capitalize()}. "
-            f"{_varying(LIGHTS, context, 'lumiere').capitalize()}."
-        )
-
     return (
         f"{directive} Format vertical 3:4.\n\n"
-        f"{build_character_sheet(context)}\n"
+        f"{build_character_sheet(context)}\n\n"
         f"Tenue : {build_outfit(context)}.\n\n"
-        f"{scene}\n\n"
+        f"{build_scene(context)}\n\n"
+        f"{NEGATIVE_DIRECTIVE}"
+    )
+
+
+REFERENCE_DIRECTIVE = (
+    "L'image fournie montre cette femme. Reprends EXACTEMENT le même visage, la "
+    "même couleur de peau, la même corpulence et la même coiffure : c'est une "
+    "autre photo de la même personne, prise un autre jour. Seuls la tenue, le "
+    "décor, la pose et la lumière changent."
+)
+
+
+def build_reference_prompt(context: AvatarContext) -> str:
+    """Prompt d'une image dérivée d'une photo de référence de la même femme."""
+    directive = (
+        PHOTO_DIRECTIVE if context.style is AvatarStyle.PHOTO else ILLUSTRATION_DIRECTIVE
+    )
+    return (
+        f"{directive} Format vertical 3:4.\n\n"
+        f"{REFERENCE_DIRECTIVE}\n\n"
+        f"Tenue : {build_outfit(context)}.\n\n"
+        f"{build_scene(context)}\n\n"
         f"{NEGATIVE_DIRECTIVE}"
     )

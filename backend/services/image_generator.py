@@ -12,7 +12,12 @@ from typing import Awaitable, Callable
 from backend.config import Settings
 from backend.core.logging import get_logger
 from backend.models.schemas import PhotoRow, Profile
-from backend.prompts.avatar_prompt import AvatarContext, AvatarStyle, build_avatar_prompt
+from backend.prompts.avatar_prompt import (
+    AvatarContext,
+    AvatarStyle,
+    build_avatar_prompt,
+    build_reference_prompt,
+)
 from backend.services.openai_service import OpenAIService
 
 logger = get_logger(__name__)
@@ -74,11 +79,8 @@ class ImageGenerator:
         counter = 0
         lock = asyncio.Lock()
 
-        async def one(profile: Profile, order: int) -> PhotoRow | None:
-            nonlocal counter
-            filename = f"{profile.code_femme}_avatar_{order:02d}.png"
-            target = photos_dir / filename
-            context = AvatarContext(
+        def make_context(profile: Profile, order: int) -> AvatarContext:
+            return AvatarContext(
                 code_femme=profile.code_femme,
                 age=profile.age_at(reference) or 30,
                 ville=profile.ville_affichee or profile.ville_residence,
@@ -89,13 +91,39 @@ class ImageGenerator:
                 variant_index=order - 1,
                 centres_interet=profile.centres_interet,
                 style=self._style,
+                taille_cm=profile.taille_cm,
+                poids_kg=profile.poids_kg,
+                nationalite=profile.nationalite,
             )
+
+        async def render(context: AvatarContext, anchor: bytes | None) -> bytes:
+            """Produit une image, ancrée sur la première photo quand elle existe."""
+            if anchor is None:
+                return await self._openai.image_png(build_avatar_prompt(context))
+            try:
+                return await self._openai.image_png_from_reference(
+                    build_reference_prompt(context), anchor
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Une passerelle compatible OpenAI peut ne pas servir la retouche
+                # d'image : mieux vaut une photo moins fidèle que pas de photo.
+                logger.warning(
+                    "Variation depuis référence indisponible (%s) : repli sur une "
+                    "génération décrite pour %s.", type(exc).__name__, context.code_femme,
+                )
+                return await self._openai.image_png(build_avatar_prompt(context))
+
+        async def one(profile: Profile, order: int, anchor: bytes | None) -> PhotoRow | None:
+            nonlocal counter
+            filename = f"{profile.code_femme}_avatar_{order:02d}.png"
+            target = photos_dir / filename
+            context = make_context(profile, order)
             try:
                 if filename in done and target.exists():
                     logger.info("Avatar déjà présent, réutilisé : %s", filename)
                 else:
                     async with self._semaphore:
-                        png = await self._openai.image_png(build_avatar_prompt(context))
+                        png = await render(context, anchor)
                     target.write_bytes(stamp_provenance(png))
             except Exception as exc:  # noqa: BLE001 — un échec n'arrête pas le dossier
                 logger.error("Avatar %s en échec : %s", filename, exc)
@@ -116,14 +144,26 @@ class ImageGenerator:
                 notes=PROVENANCE,
             )
 
-        tasks = [
-            one(profile, order)
-            for profile in profiles
-            for order in range(1, per_profile + 1)
-        ]
-        for result in await asyncio.gather(*tasks):
-            if result is not None:
-                rows.append(result)
+        async def gallery(profile: Profile) -> list[PhotoRow]:
+            """La première photo sert de référence visuelle aux suivantes."""
+            first = await one(profile, 1, None)
+            produced = [first] if first else []
+            if per_profile < 2:
+                return produced
+
+            anchor: bytes | None = None
+            portrait = photos_dir / f"{profile.code_femme}_avatar_01.png"
+            if portrait.exists():
+                anchor = portrait.read_bytes()
+
+            rest = await asyncio.gather(
+                *(one(profile, order, anchor) for order in range(2, per_profile + 1))
+            )
+            produced.extend(row for row in rest if row is not None)
+            return produced
+
+        for gallery_rows in await asyncio.gather(*(gallery(p) for p in profiles)):
+            rows.extend(gallery_rows)
 
         rows.sort(key=lambda row: (row.code_femme, row.order))
         logger.info("%d avatars générés, %d profils en échec", len(rows), len(failures))

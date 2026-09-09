@@ -188,9 +188,20 @@ dernier recours coupé sur une frontière de phrase — jamais au milieu d'une i
 
 **Avatars.** `OPENAI_IMAGE_STYLE` choisit le rendu : `photo` (défaut) vise
 l'esthétique d'une photo prise au téléphone — lumière ambiante, texture de peau
-conservée, cadrage spontané ; `illustration` produit des portraits dessinés. La
-fiche physique du personnage reste stable sur toutes ses images, seuls le décor,
-la tenue, la lumière et le cadrage changent.
+conservée, cadrage spontané ; `illustration` produit des portraits dessinés.
+
+L'identité tient par deux mécanismes. La fiche physique fige carnation,
+corpulence — déduite de la taille et du poids du dossier — traits du visage et
+coiffure, identiques sur toutes les images d'un profil. Surtout, seule la
+première photo est décrite de zéro : les suivantes sont produites par
+`images.edit` en `input_fidelity: high` à partir de cette première, ce qui ancre
+le visage au lieu de le redécrire. Une passerelle ne servant pas la retouche
+retombe sur une génération décrite, avec des photos moins fidèles plutôt
+qu'absentes.
+
+Les prises alternent selfies et photos prises par un tiers : une galerie de huit
+selfies ne ressemble pas à un album personnel. La lumière est choisie dans un
+jeu intérieur ou extérieur selon le décor.
 
 **Coûts.** Les profils sont générés par lots (`PROFILE_BATCH_SIZE`, 10 par
 défaut) et les images avec un parallélisme borné (`IMAGE_CONCURRENCY`).

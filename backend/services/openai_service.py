@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
 import random
 from typing import Any
@@ -150,6 +151,32 @@ class OpenAIService:
             )
 
         response = await self._with_retries("génération d'image", call)
+        return await self._extract_png(response)
+
+    async def image_png_from_reference(self, prompt: str, reference: bytes) -> bytes:
+        """Génère une image en repartant d'une photo existante du personnage.
+
+        Une description écrite, même détaillée, ne suffit pas à tenir un visage
+        sur huit images. Fournir la première photo en référence, avec une
+        fidélité d'entrée élevée, ancre l'identité au lieu de la redécrire.
+        """
+
+        async def call() -> Any:
+            source = io.BytesIO(reference)
+            source.name = "reference.png"
+            return await self._client.images.edit(
+                model=self.image_model,
+                image=[source],
+                prompt=prompt,
+                size=self._settings.openai_image_size,
+                input_fidelity="high",
+                n=1,
+            )
+
+        response = await self._with_retries("variation d'image", call)
+        return await self._extract_png(response)
+
+    async def _extract_png(self, response: Any) -> bytes:
         item = response.data[0]
         payload = getattr(item, "b64_json", None)
         if payload:

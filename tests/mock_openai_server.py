@@ -23,6 +23,9 @@ from fastapi import FastAPI, Request
 
 app = FastAPI(title="Mock OpenAI")
 
+# Trace des appels de retouche, pour vérifier le chaînage sur référence.
+_EDIT_CALLS: list[dict[str, Any]] = []
+
 PRENOMS = [
     "Aminata", "Fatou", "Adjoa", "Nadia", "Chantal", "Sylvie", "Mariam", "Rokia",
     "Grace", "Yasmine", "Awa", "Bintou", "Clarisse", "Fanta", "Kadiatou", "Leila",
@@ -218,6 +221,26 @@ async def chat_completions(request: Request) -> dict[str, Any]:
         }],
         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
     }
+
+
+@app.post("/v1/images/edits")
+async def images_edits(request: Request) -> dict[str, Any]:
+    """Retouche depuis une image de référence, servie en multipart."""
+    form = await request.form()
+    prompt = str(form.get("prompt", ""))
+    uploads = form.getlist("image[]") or form.getlist("image")
+    _EDIT_CALLS.append({"prompt": prompt, "references": len(uploads)})
+    png = _solid_png(seed=len(prompt))
+    return {
+        "created": int(time.time()),
+        "data": [{"b64_json": base64.b64encode(png).decode("ascii")}],
+    }
+
+
+@app.get("/_calls/edits")
+async def edit_calls() -> dict[str, Any]:
+    """Introspection de test : combien de retouches, avec quels prompts."""
+    return {"count": len(_EDIT_CALLS), "calls": _EDIT_CALLS}
 
 
 @app.post("/v1/images/generations")
