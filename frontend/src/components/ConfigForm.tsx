@@ -95,10 +95,30 @@ export function ConfigForm({ upload, busy, onSubmit }: Props) {
   const resolvedAgents = autoAgents
     ? Math.max(1, Math.min(profileCount, Math.round(profileCount / 10) || 1))
     : agentCount
-  const invalid = useMemo(
-    () => countries.length === 0 || ageMin > ageMax || profileCount < 1,
-    [countries, ageMin, ageMax, profileCount],
-  )
+
+  // Un champ numérique vidé vaut 0, et un champ illisible NaN : le serveur les
+  // refuse tous deux. On les arrête ici, avec la raison affichée.
+  const problems = useMemo(() => {
+    const found: string[] = []
+    const atLeast = (value: number, min: number, label: string) => {
+      if (!Number.isFinite(value) || value < min) found.push(label)
+    }
+    atLeast(profileCount, 1, 'Le nombre de profils doit valoir au moins 1.')
+    atLeast(startNumber, 1, 'Le premier numéro doit valoir au moins 1.')
+    atLeast(avatars, 0, "Le nombre d'avatars ne peut pas être négatif.")
+    if (!autoAgents) atLeast(agentCount, 1, "Le nombre d'agents doit valoir au moins 1.")
+    if (!Number.isFinite(ageMin) || !Number.isFinite(ageMax)) {
+      found.push('Les âges doivent être renseignés.')
+    } else if (ageMin > ageMax) {
+      found.push("L'âge minimum dépasse l'âge maximum.")
+    }
+    if (countries.length === 0) found.push('Sélectionnez au moins un pays.')
+    return found
+  }, [profileCount, startNumber, avatars, agentCount, autoAgents, ageMin, ageMax, countries])
+
+  const invalid = problems.length > 0
+  // Le bouton de test impose 3 profils : le compteur ne le concerne pas.
+  const testBlocked = problems.some((line) => !line.startsWith('Le nombre de profils'))
 
   const build = (count: number): GenerationRequest => ({
     upload_id: upload.upload_id,
@@ -372,15 +392,12 @@ export function ConfigForm({ upload, busy, onSubmit }: Props) {
             avec recopie des formules et des listes déroulantes.
           </p>
         )}
-        {ageMin > ageMax && (
-          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            L'âge minimum dépasse l'âge maximum.
-          </p>
-        )}
-        {countries.length === 0 && (
-          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            Sélectionnez au moins un pays.
-          </p>
+        {problems.length > 0 && (
+          <ul className="mt-4 space-y-1 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+            {problems.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
         )}
 
         <div className="mt-6 flex flex-wrap gap-3">
@@ -395,7 +412,7 @@ export function ConfigForm({ upload, busy, onSubmit }: Props) {
           <button
             type="button"
             className="btn-secondary"
-            disabled={busy || countries.length === 0}
+            disabled={busy || testBlocked}
             onClick={() => onSubmit(build(3))}
           >
             Tester avec 3 profils

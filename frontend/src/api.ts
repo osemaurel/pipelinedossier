@@ -109,12 +109,62 @@ export function inspectHealth(health: Health): HealthVerdict {
   return details.length ? { kind: 'config-perimee', details } : { kind: 'ok' }
 }
 
+/** Libellés français des champs, pour rendre une erreur de validation lisible. */
+const FIELD_LABELS: Record<string, string> = {
+  profile_count: 'Nombre de profils',
+  agent_count: "Nombre d'agents",
+  avatars_per_profile: 'Avatars par profil',
+  age_min: 'Âge minimum',
+  age_max: 'Âge maximum',
+  start_number: 'Premier numéro',
+  countries: 'Pays',
+  upload_id: 'Modèle Excel',
+}
+
+interface ValidationEntry {
+  loc?: (string | number)[]
+  msg?: string
+  ctx?: Record<string, unknown>
+}
+
+/** Les messages de validation arrivent en anglais : on rend les cas courants. */
+function translate(entry: ValidationEntry): string {
+  const message = entry.msg ?? ''
+  const bound = entry.ctx?.ge ?? entry.ctx?.le ?? entry.ctx?.gt ?? entry.ctx?.lt
+  if (message.includes('greater than or equal')) return `doit valoir au moins ${bound}`
+  if (message.includes('less than or equal')) return `ne doit pas dépasser ${bound}`
+  if (message.includes('greater than')) return `doit dépasser ${bound}`
+  if (message.includes('less than')) return `doit rester sous ${bound}`
+  if (message.includes('Field required')) return 'est obligatoire'
+  if (message.includes('valid integer')) return 'doit être un nombre entier'
+  return message || 'valeur refusée'
+}
+
+/** Une erreur de validation arrive en liste d'objets, pas en texte. */
+function describeValidation(entries: ValidationEntry[]): string {
+  const lines = entries.map((entry) => {
+    const field = entry.loc?.filter((part) => part !== 'body').slice(-1)[0]
+    const label = FIELD_LABELS[String(field)] ?? String(field ?? 'champ')
+    return `« ${label} » ${translate(entry)}`
+  })
+  return `Valeurs refusées par le serveur : ${lines.join(' ; ')}.`
+}
+
 /** Message le plus informatif possible : sans détail lisible, on reste aveugle. */
 async function describeFailure(response: Response): Promise<string> {
   const raw = await response.text().catch(() => '')
   let detail = ''
   try {
-    detail = (JSON.parse(raw) as { detail?: string }).detail ?? ''
+    const parsed = (JSON.parse(raw) as { detail?: unknown }).detail
+    if (Array.isArray(parsed)) {
+      // Cas d'une erreur de validation FastAPI : sans ce traitement, la liste
+      // finissait rendue en « [object Object] ».
+      detail = describeValidation(parsed as ValidationEntry[])
+    } else if (typeof parsed === 'string') {
+      detail = parsed
+    } else if (parsed) {
+      detail = JSON.stringify(parsed).slice(0, 300)
+    }
   } catch {
     // Réponse non JSON : page d'erreur de l'hébergeur, proxy, ou HTML.
     detail = raw.trim().startsWith('<') ? '' : raw.slice(0, 200)
